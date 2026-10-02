@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>XPLODE - Withdrawals</title>
+    <meta name="description" content="Withdraw your XPLODE balance to MTN Mobile Money or Airtel Money. Minimum UGX 500." />
+    <link rel="icon" type="image/png" sizes="84x84" href="xlogo-thumb.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css?v=21" />
+  </head>
+  <body class="app-body app-body-home withdraw-page">
+    <div class="app-shell app-shell-home withdraw-shell">
+      <div class="home-layout withdraw-layout">
+        <header class="xplode-banner dashboard-header account-header withdraw-header">
+          <div class="banner-topline">
+            <img class="mini-mark" src="xlogo-thumb.png" alt="XPlode" width="84" height="84" />
+          </div>
+          <div class="balance-box">
+            <span class="balance-pill-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H19a2 2 0 0 1 2 2v11H5a2 2 0 0 1-2-2V7.5Z"/><path d="M3 9h16a2 2 0 0 1 2 2v2h-5a2 2 0 0 1 0-4h5"/><path d="M16.5 11.1v.8"/></svg></span>
+            <span class="balance-label">WITHDRAWABLE</span>
+            <strong data-balance="withdrawable">UGX 0</strong>
+          </div>
+        </header>
+
+        <main class="withdraw-main">
+          <section class="withdraw-card" aria-labelledby="withdrawTitle">
+            <span class="withdraw-spark withdraw-spark-left" aria-hidden="true"></span>
+            <span class="withdraw-spark withdraw-spark-right" aria-hidden="true"></span>
+
+            <h1 id="withdrawTitle">Withdraw Funds</h1>
+            <p class="withdraw-subtitle">Minimum UGX 500</p>
+
+            <div class="withdraw-notice" role="status" aria-live="polite" id="withdrawCooldown" hidden>
+              <span class="withdraw-notice-icon" aria-hidden="true">⏱</span>
+              <span>One withdrawal per 24 hours.</span>
+            </div>
+
+            <div class="withdraw-amount-box" aria-live="polite">
+              <span class="withdrawable-label">WITHDRAWABLE</span>
+              <strong data-balance="withdrawable">UGX 0</strong>
+            </div>
+
+            <form id="withdrawForm" class="withdraw-form" novalidate>
+              <label for="withdrawSelect">Receive via</label>
+              <div class="withdraw-account-row">
+                <select id="withdrawSelect" name="account" aria-label="Choose an account" required>
+                  <option value="">— Choose an account —</option>
+                  <option value="mtn">MTN Mobile Money</option>
+                  <option value="airtel">Airtel Money</option>
+                </select>
+                <button type="button" class="withdraw-account-button" aria-label="Choose account" tabindex="-1">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 13v-1a6 6 0 0 1 12 0v1"/><path d="M4 13h2a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a1 1 0 0 1 1-1Zm16 0h-2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a1 1 0 0 0-1-1Z"/><path d="M12 8a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z"/></svg>
+                </button>
+              </div>
+
+              <label for="withdrawAccountName">Account holder name</label>
+              <input id="withdrawAccountName" name="accountName" type="text" minlength="3" maxlength="60" placeholder="Name on the mobile money account" autocomplete="off" required />
+
+              <label for="withdrawAccountNumber">Mobile money number</label>
+              <input id="withdrawAccountNumber" name="accountNumber" type="tel" inputmode="numeric" pattern="0[0-9]{9}" minlength="10" maxlength="12" placeholder="e.g. 0770123456" autocomplete="off" required />
+
+              <label for="withdrawAmount">Withdrawal amount</label>
+              <input id="withdrawAmount" name="amount" type="number" min="500" step="500" inputmode="numeric" placeholder="Enter amount" required />
+
+              <label for="withdrawPin">PIN</label>
+              <div class="withdraw-pin-row">
+                <input id="withdrawPin" name="pin" type="password" inputmode="numeric" minlength="4" maxlength="5" placeholder="Enter your PIN" autocomplete="off" required />
+                <button type="submit" class="submit-btn small-btn">Withdraw</button>
+              </div>
+
+              <p id="withdrawMessage" class="form-message" aria-live="polite"></p>
+            </form>
+          </section>
+
+          <section class="withdraw-history" aria-labelledby="withdrawHistoryTitle">
+            <div class="history-header">
+              <span id="withdrawHistoryTitle">Recent Withdrawals</span>
+              <span class="history-pill">Latest</span>
+            </div>
+            <ul class="history-list" id="withdrawalHistory" aria-live="polite">
+              <li><div><strong>Loading withdrawals</strong></div></li>
+            </ul>
+          </section>
+        </main>
+
+        <nav class="dashboard-mini-nav account-bottom-nav withdraw-bottom-nav" aria-label="Primary navigation">
+          <a class="dashboard-card" href="dashboard.html"><span class="home-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1v-9.5Z"/></svg></span><span>HOME</span></a>
+          <a class="dashboard-card" href="cartoons.html"><span class="home-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="13" height="14" rx="2"/><path d="M16 8h5v11H7"/><path d="m10 9 6 3-6 3V9Z"/></svg></span><span>TOONHUB</span></a>
+          <a class="dashboard-card" href="team.html"><span class="home-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-6 9a6 6 0 0 1 12 0M18 7a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Zm3 11a4.5 4.5 0 0 0-3-4.2"/></svg></span><span>TEAM</span></a>
+          <a class="dashboard-card" href="my.html"><span class="home-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20a8 8 0 0 1 16 0"/></svg></span><span>MY</span></a>
+        </nav>
+      </div>
+    </div>
+
+    <script src="xp-config.js?v=1"></script>
+    <script src="script.js?v=15" defer></script>
+  </body>
+</html>

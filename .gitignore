@@ -1,0 +1,11 @@
+.env
+xplode.db
+xplode.db-shm
+xplode.db-wal
+
+server.log
+*.log
+node_modules/
+.freebuff/
+server.log
+*.log

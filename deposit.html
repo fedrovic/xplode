@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>XPLODE - Deposit</title>
+    <meta name="description" content="Deposit into your XPLODE wallet with Airtel Money or MTN Mobile Money. Minimum UGX 10,000." />
+    <link rel="icon" type="image/png" sizes="84x84" href="xlogo-thumb.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css?v=21" />
+  </head>
+  <body class="app-body app-body-home deposit-page">
+    <div class="app-shell app-shell-home">
+      <div class="home-layout deposit-layout">
+        <header class="xplode-banner dashboard-header deposit-header">
+          <div class="banner-topline">
+            <img class="mini-mark" src="xlogo-thumb.png" alt="XPlode" width="84" height="84" />
+          </div>
+          <div class="balance-box">
+            <span class="balance-pill-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H19a2 2 0 0 1 2 2v11H5a2 2 0 0 1-2-2V7.5Z"/><path d="M3 9h16a2 2 0 0 1 2 2v2h-5a2 2 0 0 1 0-4h5"/><path d="M16.5 11.1v.8"/></svg></span>
+            <span class="balance-label">Withdrawable</span>
+            <strong data-balance="withdrawable">UGX 0</strong>
+          </div>
+        </header>
+
+        <main class="deposit-content">
+          <section class="deposit-intro" aria-labelledby="depositTitle">
+            <span class="deposit-spark deposit-spark-left" aria-hidden="true"></span>
+            <span class="deposit-spark deposit-spark-right" aria-hidden="true"></span>
+            <h1 id="depositTitle">Make a Deposit</h1>
+            <p>Minimum UGX 10,000</p>
+          </section>
+
+          <form id="depositForm" class="inline-form deposit-form deposit-form-panel">
+            <label for="depositMethod">Select Payment Method</label>
+            <select id="depositMethod" name="provider" required>
+              <option value="">— Choose a mobile money account —</option>
+              <option value="Airtel Money">Airtel Money</option>
+              <option value="MTN Mobile Money">MTN Mobile Money</option>
+            </select>
+            <section class="deposit-payment-details" id="airtelPaymentDetails" aria-labelledby="airtelPaymentHeading" hidden>
+              <h2 id="airtelPaymentHeading">Pay with Airtel Money</h2>
+              <p>Send the exact deposit amount to this number:</p>
+              <div class="deposit-number-row">
+                <strong id="depositNumber">0704 141 950</strong>
+                <button class="deposit-copy-number" id="copyDepositNumber" type="button" data-copy-target="depositNumber">Copy number</button>
+              </div>
+              <p>After payment, enter the transaction ID from your Airtel Money confirmation message below.</p>
+            </section>
+            <section class="deposit-payment-details" id="mtnPaymentDetails" aria-labelledby="mtnPaymentHeading" hidden>
+              <h2 id="mtnPaymentHeading">Pay with MTN Mobile Money</h2>
+              <p>Send the exact deposit amount to this number:</p>
+              <div class="deposit-number-row">
+                <strong id="mtnDepositNumber">0788 734 485</strong>
+                <button class="deposit-copy-number" id="copyMtnDepositNumber" type="button" data-copy-target="mtnDepositNumber">Copy number</button>
+              </div>
+              <p>After payment, enter the transaction ID from your MTN Mobile Money confirmation message below.</p>
+            </section>
+            <label for="depositAmount">Amount (UGX)</label>
+            <input id="depositAmount" name="amount" type="number" min="10000" step="1000" inputmode="numeric" placeholder="e.g. 10000" required />
+            <small>Minimum UGX 10,000.</small>
+            <label for="depositTransactionId">Transaction ID</label>
+            <input id="depositTransactionId" name="transactionId" type="text" minlength="6" maxlength="120" autocomplete="off" placeholder="Paste the transaction ID from your SMS" required />
+            <small>This ID must be unique. It can only be used once.</small>
+            <label for="depositPayerNumber">Number you paid from</label>
+            <input id="depositPayerNumber" name="payerNumber" type="tel" inputmode="numeric" pattern="0[0-9]{9}" minlength="10" maxlength="12" autocomplete="off" placeholder="e.g. 0788734485" required />
+            <small>Your wallet is credited automatically once your payment SMS is received.</small>
+            <button type="submit" class="submit-btn small-btn"><span aria-hidden="true">⇧</span> Submit Deposit</button>
+            <p class="deposit-notice">Payment references are submitted for manual verification against your mobile money confirmation SMS. Your balance will update only after the payment is confirmed by the XPLODE team.</p>
+            <p id="depositMessage" class="form-message" aria-live="polite"></p>
+          </form>
+
+          <section class="transfer-history deposit-history-panel" aria-labelledby="depositHistoryTitle">
+            <div class="history-header">
+              <span id="depositHistoryTitle">Recent Deposits</span>
+              <span class="history-pill">Latest</span>
+            </div>
+            <ul class="history-list" id="depositHistory" aria-live="polite">
+              <li><div><strong>Loading deposits</strong></div></li>
+            </ul>
+          </section>
+        </main>
+
+        <a class="deposit-support" href="https://t.me/jenny_sabierl" target="_blank" rel="noopener noreferrer" aria-label="Chat with XPlode support on Telegram" title="Chat with XPlode Support">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13v-1a8 8 0 0 1 16 0v1"/><path d="M4 12h2a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4a1 1 0 0 1 1-1Zm16 0h-2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-4a1 1 0 0 0-1-1Z"/></svg>
+        </a>
+
+        <nav class="dashboard-mini-nav deposit-bottom-nav" aria-label="Primary navigation">
+          <a class="dashboard-card" href="dashboard.html">
+            <span class="home-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1v-9.5Z"/></svg></span>
+            <span>HOME</span>
+          </a>
+          <a class="dashboard-card" href="cartoons.html">
+            <span class="home-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="13" height="14" rx="2"/><path d="M16 8h5v11H7"/><path d="m10 9 6 3-6 3V9Z"/></svg></span>
+            <span>TOONHUB</span>
+          </a>
+          <a class="dashboard-card" href="team.html">
+            <span class="home-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-6 9a6 6 0 0 1 12 0M18 7a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Zm3 11a4.5 4.5 0 0 0-3-4.2"/></svg></span>
+            <span>TEAM</span>
+          </a>
+          <a class="dashboard-card" href="my.html">
+            <span class="home-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20a8 8 0 0 1 16 0"/></svg></span>
+            <span>MY</span>
+          </a>
+        </nav>
+      </div>
+    </div>
+
+    <script src="xp-config.js?v=1"></script>
+    <script src="script.js?v=15" defer></script>
+  </body>
+</html>

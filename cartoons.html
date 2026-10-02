@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>XPLODE - ToonHub</title>
+    <meta name="description" content="Watch XPLODE cartoons and earn rewards with every package." />
+    <link rel="icon" type="image/png" sizes="84x84" href="xlogo-thumb.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css?v=21" />
+  </head>
+  <body class="app-body app-body-home cartoon-page">
+    <div class="app-shell app-shell-home">
+      <div class="home-layout collection-layout watch-layout cartoon-layout">
+        <header class="xplode-banner dashboard-header cartoon-header">
+          <div class="banner-topline">
+            <img class="mini-mark" src="xlogo-thumb.png" alt="XPlode" width="84" height="84" />
+          </div>
+          <div class="balance-box">
+            <span class="balance-pill-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H19a2 2 0 0 1 2 2v11H5a2 2 0 0 1-2-2V7.5Z"/><path d="M3 9h16a2 2 0 0 1 2 2v2h-5a2 2 0 0 1 0-4h5"/><path d="M16.5 11.1v.8"/></svg></span>
+            <span class="balance-label">WITHDRAWABLE</span>
+            <strong data-balance="withdrawable">UGX 0</strong>
+          </div>
+        </header>
+
+        <main class="watch-shell">
+          <div class="watch-header">
+            <button class="watch-header-control watch-previous" id="watchPrevious" type="button" aria-label="Previous cartoon">◀◀</button>
+            <div class="watch-masthead">
+              <span>XPLODE</span>
+              <p>Watch cartoons and earn rewards</p>
+            </div>
+            <button class="watch-header-control watch-next" id="watchNext" type="button" aria-label="Next cartoon">◎</button>
+          </div>
+
+          <div class="watch-list" id="watchList">
+            <article class="watch-card" data-watch-level="1">
+              <div class="watch-card-top">
+                <div class="watch-labels">
+                  <span class="watch-tier">VIP 1</span>
+                  <span class="watch-genre">Comedy</span>
+                </div>
+                <h2>BIG BUCK BUNNY</h2>
+              </div>
+
+              <div class="watch-card-body">
+                <div class="watch-video">
+                  <iframe src="about:blank" data-video-src="https://www.youtube-nocookie.com/embed/YE7VzlLtp-4?enablejsapi=1" title="Big Buck Bunny animated short by Blender Foundation" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+                  <div class="watch-lock-overlay">Subscribe to VIP 1 to watch</div>
+                </div>
+                <div class="watch-description">
+                  <div class="watch-brand-line">
+                    <span class="watch-play-mark" aria-hidden="true">▶</span>
+                    <span>BIG BUCK BUNNY</span>
+                  </div>
+                  <p>A cheerful animated short from the Blender Foundation’s open movie project.</p>
+                  <small class="watch-attribution">Blender Foundation · <a href="https://www.youtube.com/watch?v=YE7VzlLtp-4" target="_blank" rel="noopener noreferrer">Open video</a> · <a href="https://peach.blender.org/about/" target="_blank" rel="noopener noreferrer">CC BY 3.0</a></small>
+                </div>
+              </div>
+
+              <div class="watch-card-footer">
+                <div class="watch-stat">
+                  <small>Price</small>
+                  <strong>10,000 UGX</strong>
+                </div>
+                <div class="watch-stat">
+                  <small>Reward</small>
+                  <strong>800 UGX</strong>
+                </div>
+                <button class="watch-action" type="button" data-subscribe-level="1" aria-describedby="watchAccessNote">Subscribe VIP 1</button>
+                <button class="watch-action" type="button" data-watch-start="1" hidden>Watch VIP 1 today</button>
+                <button class="watch-claim" type="button" data-watch-claim="1" hidden>Claim daily reward</button>
+                <a class="watch-deposit-link" href="deposit.html" hidden>Open Deposit</a>
+              </div>
+            </article>
+
+            <article class="watch-card" data-watch-level="2">
+              <div class="watch-card-top">
+                <div class="watch-labels">
+                  <span class="watch-tier">VIP 2</span>
+                  <span class="watch-genre">Training &amp; Production</span>
+                </div>
+                <h2>SINTEL</h2>
+              </div>
+
+              <div class="watch-card-body">
+                <div class="watch-video">
+                  <iframe src="about:blank" data-video-src="https://www.youtube-nocookie.com/embed/eRsGyueVLvQ?enablejsapi=1" title="Sintel animated short by Blender Foundation" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+                  <div class="watch-lock-overlay">Subscribe to VIP 2 to watch</div>
+                </div>
+                <div class="watch-description">
+                  <div class="watch-brand-line">
+                    <span class="watch-play-mark" aria-hidden="true">▶</span>
+                    <span>SINTEL</span>
+                  </div>
+                  <p>An animated fantasy short about a traveler searching for her lost dragon companion.</p>
+                  <small class="watch-attribution">Blender Foundation · <a href="https://www.youtube.com/watch?v=eRsGyueVLvQ" target="_blank" rel="noopener noreferrer">Open video</a> · <a href="https://durian.blender.org/sharing/" target="_blank" rel="noopener noreferrer">CC BY 3.0</a></small>
+                </div>
+              </div>
+
+              <div class="watch-card-footer">
+                <div class="watch-stat">
+                  <small>Price</small>
+                  <strong>45,000 UGX</strong>
+                </div>
+                <div class="watch-stat">
+                  <small>Reward</small>
+                  <strong>2,250 UGX</strong>
+                </div>
+                <button class="watch-action" type="button" data-subscribe-level="2" aria-describedby="watchAccessNote">Subscribe VIP 2</button>
+                <button class="watch-action" type="button" data-watch-start="2" hidden>Watch VIP 2 today</button>
+                <button class="watch-claim" type="button" data-watch-claim="2" hidden>Claim daily reward</button>
+                <a class="watch-deposit-link" href="deposit.html" hidden>Open Deposit</a>
+              </div>
+            </article>
+
+            <article class="watch-card" data-watch-level="3">
+              <div class="watch-card-top">
+                <div class="watch-labels">
+                  <span class="watch-tier">VIP 3</span>
+                  <span class="watch-genre">CARTOON</span>
+                </div>
+                <h2>ELEPHANTS DREAM</h2>
+              </div>
+
+              <div class="watch-card-body">
+                <div class="watch-video">
+                  <iframe src="about:blank" data-video-src="https://www.youtube-nocookie.com/embed/TLkA0RELQ1g?enablejsapi=1" title="Elephants Dream animated short by Blender Foundation" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+                  <div class="watch-lock-overlay">Subscribe to VIP 3 to watch</div>
+                </div>
+                <div class="watch-description">
+                  <div class="watch-brand-line">
+                    <span class="watch-play-mark" aria-hidden="true">▶</span>
+                    <span>ELEPHANTS DREAM</span>
+                  </div>
+                  <p>Two characters explore a strange and ever-changing machine world.</p>
+                  <small class="watch-attribution">Blender Foundation · <a href="https://www.youtube.com/watch?v=TLkA0RELQ1g" target="_blank" rel="noopener noreferrer">Open video</a> · <a href="https://orange.blender.org/blog/creative-commons-license-2/" target="_blank" rel="noopener noreferrer">Creative Commons</a></small>
+                </div>
+              </div>
+
+              <div class="watch-card-footer">
+                <div class="watch-stat">
+                  <small>Price</small>
+                  <strong>100,000 UGX</strong>
+                </div>
+                <div class="watch-stat">
+                  <small>Reward</small>
+                  <strong>3,000 UGX</strong>
+                </div>
+                <button class="watch-action" type="button" data-subscribe-level="3" aria-describedby="watchAccessNote">Subscribe VIP 3</button>
+                <button class="watch-action" type="button" data-watch-start="3" hidden>Watch VIP 3 today</button>
+                <button class="watch-claim" type="button" data-watch-claim="3" hidden>Claim daily reward</button>
+                <a class="watch-deposit-link" href="deposit.html" hidden>Open Deposit</a>
+              </div>
+            </article>
+          </div>
+          <p id="watchAccessNote" class="watch-access-note">Subscribe to a level, deposit its listed amount, and wait for admin approval. Each level can be watched and claimed once per day.</p>
+        </main>
+
+        <a class="cartoon-support" href="https://t.me/jenny_sabierl" target="_blank" rel="noopener noreferrer" aria-label="Chat with XPlode support on Telegram" title="Chat with XPlode Support">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13v-1a8 8 0 0 1 16 0v1"/><path d="M4 12h2a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4a1 1 0 0 1 1-1Zm16 0h-2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-4a1 1 0 0 0-1-1Z"/></svg>
+        </a>
+
+        <nav class="dashboard-mini-nav cartoon-bottom-nav" aria-label="Primary navigation">
+          <a class="dashboard-card" href="dashboard.html">
+            <span class="home-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1v-9.5Z"/></svg></span><span>HOME</span>
+          </a>
+          <a class="dashboard-card active" href="cartoons.html" aria-current="page">
+            <span class="home-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="13" height="14" rx="2"/><path d="M16 8h5v11H7"/><path d="m10 9 6 3-6 3V9Z"/></svg></span><span>TOONHUB</span>
+          </a>
+          <a class="dashboard-card" href="team.html">
+            <span class="home-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-6 9a6 6 0 0 1 12 0M18 7a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Zm3 11a4.5 4.5 0 0 0-3-4.2"/></svg></span><span>TEAM</span>
+          </a>
+          <a class="dashboard-card" href="my.html">
+            <span class="home-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20a8 8 0 0 1 16 0"/></svg></span><span>MY</span>
+          </a>
+        </nav>
+      </div>
+    </div>
+
+    <script src="xp-config.js?v=1"></script>
+    <script src="script.js?v=15" defer></script>
+  </body>
+</html>

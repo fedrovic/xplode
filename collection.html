@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>XPLODE Collection</title>
+    <meta name="description" content="Explore the XPLODE animated collection." />
+    <link rel="icon" type="image/png" sizes="84x84" href="xlogo-thumb.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css?v=21" />
+  </head>
+  <body class="app-body app-body-home">
+    <div class="app-shell app-shell-home">
+      <div class="home-layout collection-layout">
+        <header class="xplode-banner dashboard-header">
+          <div class="banner-topline">
+            <img class="mini-mark" src="xlogo-thumb.png" alt="XPlode" width="84" height="84" />
+          </div>
+          <div class="balance-box">
+            <span class="balance-label">Withdrawable</span>
+            <strong data-balance="withdrawable">UGX 0</strong>
+          </div>
+        </header>
+
+        <div class="filter-row">
+          <button class="filter active">All</button>
+          <button class="filter">Featured</button>
+          <button class="filter">Motion</button>
+          <button class="filter">Portraits</button>
+        </div>
+
+        <section class="gallery-grid">
+          <article class="gallery-card" data-category="featured">
+            <div class="gallery-art art-one"></div>
+            <div class="gallery-meta">
+              <h3>Velvet Echo</h3>
+              <span>1.7 ETH</span>
+            </div>
+          </article>
+          <article class="gallery-card" data-category="motion">
+            <div class="gallery-art art-two"></div>
+            <div class="gallery-meta">
+              <h3>Glass Noise</h3>
+              <span>2.1 ETH</span>
+            </div>
+          </article>
+          <article class="gallery-card" data-category="portraits">
+            <div class="gallery-art art-three"></div>
+            <div class="gallery-meta">
+              <h3>Seamless</h3>
+              <span>1.4 ETH</span>
+            </div>
+          </article>
+          <article class="gallery-card" data-category="featured">
+            <div class="gallery-art art-four"></div>
+            <div class="gallery-meta">
+              <h3>Fracture</h3>
+              <span>1.9 ETH</span>
+            </div>
+          </article>
+          <article class="gallery-card" data-category="motion">
+            <div class="gallery-art art-five"></div>
+            <div class="gallery-meta">
+              <h3>Afterglow</h3>
+              <span>2.5 ETH</span>
+            </div>
+          </article>
+          <article class="gallery-card" data-category="portraits">
+            <div class="gallery-art art-six"></div>
+            <div class="gallery-meta">
+              <h3>Phantom</h3>
+              <span>1.2 ETH</span>
+            </div>
+          </article>
+        </section>
+
+        <nav class="dashboard-mini-nav collection-bottom-nav" aria-label="Primary navigation">
+          <a class="dashboard-card" href="dashboard.html"><span class="home-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1v-9.5Z"/></svg></span><span>HOME</span></a>
+          <a class="dashboard-card active" href="cartoons.html" aria-current="page"><span class="home-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="13" height="14" rx="2"/><path d="M16 8h5v11H7"/><path d="m10 9 6 3-6 3V9Z"/></svg></span><span>TOONHUB</span></a>
+          <a class="dashboard-card" href="team.html"><span class="home-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-6 9a6 6 0 0 1 12 0M18 7a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Zm3 11a4.5 4.5 0 0 0-3-4.2"/></svg></span><span>TEAM</span></a>
+          <a class="dashboard-card" href="my.html"><span class="home-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20a8 8 0 0 1 16 0"/></svg></span><span>MY</span></a>
+        </nav>
+      </div>
+    </div>
+
+    <script src="xp-config.js?v=1"></script>
+    <script src="script.js?v=15" defer></script>
+  </body>
+</html>

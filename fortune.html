@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>XPLODE - Fortune</title>
+    <meta name="description" content="Redeem XPLODE fortune codes and track your winnings." />
+    <link rel="icon" type="image/png" sizes="84x84" href="xlogo-thumb.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css?v=21" />
+  </head>
+  <body class="app-body app-body-home account-page fortune-page">
+    <div class="app-shell app-shell-home account-shell fortune-shell">
+      <div class="home-layout account-layout fortune-layout">
+        <header class="xplode-banner dashboard-header account-header fortune-header">
+          <div class="banner-topline">
+            <img class="mini-mark" src="xlogo-thumb.png" alt="XPlode" width="84" height="84" />
+          </div>
+          <div class="balance-box">
+            <span class="balance-pill-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H19a2 2 0 0 1 2 2v11H5a2 2 0 0 1-2-2V7.5Z"/><path d="M3 9h16a2 2 0 0 1 2 2v2h-5a2.5 2.5 0 0 1 0-5h5"/><path d="M16.5 11.1v.8"/></svg></span>
+            <span class="balance-label">WITHDRAWABLE</span>
+            <strong data-balance="withdrawable">UGX 0</strong>
+          </div>
+        </header>
+
+        <main class="fortune-main">
+          <section class="fortune-total" aria-label="Total won">
+            <span>💰 TOTAL WON</span>
+            <strong data-fortune-total>UGX 0</strong>
+          </section>
+
+          <button class="fortune-open-button" id="openFortuneButton" type="button">✨ Open Fortune Envelope</button>
+
+          <section class="fortune-wins-section" aria-labelledby="fortuneWinsTitle">
+            <h1 id="fortuneWinsTitle">🎁 Your Recent Wins</h1>
+            <div class="fortune-wins-list" id="fortuneWinsList" aria-live="polite"></div>
+            <p class="fortune-empty-state" id="fortuneEmptyState" hidden>No wins yet.</p>
+          </section>
+        </main>
+
+        <a class="account-support fortune-support" href="https://t.me/jenny_sabierl" target="_blank" rel="noopener noreferrer" aria-label="Chat with XPlode support on Telegram" title="Chat with XPlode Support">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13v-1a8 8 0 0 1 16 0v1"/><path d="M4 12h2a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4a1 1 0 0 1 1-1Zm16 0h-2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-4a1 1 0 0 0-1-1Z"/></svg>
+        </a>
+
+        <nav class="dashboard-mini-nav account-bottom-nav fortune-bottom-nav" aria-label="Primary navigation">
+          <a class="dashboard-card" href="dashboard.html"><span class="home-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1v-9.5Z"/></svg></span><span>HOME</span></a>
+          <a class="dashboard-card" href="cartoons.html"><span class="home-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="13" height="14" rx="2"/><path d="M16 8h5v11H7"/><path d="m10 9 6 3-6 3V9Z"/></svg></span><span>TOONHUB</span></a>
+          <a class="dashboard-card" href="team.html"><span class="home-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-6 9a6 6 0 0 1 12 0M18 7a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Zm3 11a4.5 4.5 0 0 0-3-4.2"/></svg></span><span>TEAM</span></a>
+          <a class="dashboard-card" href="my.html"><span class="home-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20a8 8 0 0 1 16 0"/></svg></span><span>MY</span></a>
+        </nav>
+      </div>
+    </div>
+
+    <div class="fortune-overlay" id="fortuneOverlay" aria-hidden="true">
+      <section class="fortune-modal" role="dialog" aria-modal="true" aria-labelledby="fortuneModalTitle" aria-describedby="fortuneModalDescription">
+        <button class="fortune-modal-close" id="closeFortuneButton" type="button" aria-label="Close fortune envelope">×</button>
+        <div class="fortune-envelope" aria-hidden="true">💌</div>
+        <h2 id="fortuneModalTitle">Enter Fortune Code</h2>
+        <p id="fortuneModalDescription">Paste your code below and hit win!</p>
+        <form id="fortuneCodeForm" novalidate>
+          <label class="visually-hidden" for="fortuneCodeInput">Fortune code</label>
+          <input class="fortune-code-input" id="fortuneCodeInput" name="code" type="text" placeholder="FORT-XXXXXX" autocomplete="off" maxlength="20" />
+          <button class="fortune-win-button" id="fortuneWinButton" type="submit">🎯 Win</button>
+        </form>
+        <p class="fortune-result" id="fortuneResult" role="status" aria-live="polite"></p>
+      </section>
+    </div>
+
+    <script src="xp-config.js?v=1"></script>
+    <script src="script.js?v=15" defer></script>
+  </body>
+</html>

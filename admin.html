@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>XPLODE - Admin Dashboard</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="icon" type="image/png" sizes="84x84" href="xlogo-thumb.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css?v=21" />
+  </head>
+  <body class="app-body app-body-home admin-page">
+    <div class="app-shell app-shell-home">
+      <div class="home-layout admin-layout">
+        <header class="xplode-banner dashboard-header">
+          <div class="banner-topline">
+            <img class="mini-mark" src="xlogo-thumb.png" alt="XPlode" width="84" height="84" />
+          </div>
+          <div class="balance-box admin-header-actions">
+            <span class="balance-label">OPERATOR</span>
+            <strong>XPLODE ADMIN</strong>
+            <button type="button" id="adminSignOut" class="admin-tab admin-signout">Sign out</button>
+          </div>
+        </header>
+
+        <main class="deposit-content admin-main">
+          <p id="adminNotice" class="form-message" aria-live="polite"></p>
+
+          <!-- Dashboard -->
+          <div id="adminPanel" hidden>
+            <!-- Stats row -->
+            <section class="admin-stats" aria-label="Overview">
+              <div class="admin-stat-card stat-deposits">
+                <span class="admin-stat-icon" aria-hidden="true">💰</span>
+                <div><strong id="statPendingDeposits">–</strong><span>Pending deposits</span></div>
+              </div>
+              <div class="admin-stat-card stat-withdrawals">
+                <span class="admin-stat-icon" aria-hidden="true">🏧</span>
+                <div><strong id="statPendingWithdrawals">–</strong><span>Pending withdrawals</span></div>
+              </div>
+              <div class="admin-stat-card stat-users">
+                <span class="admin-stat-icon" aria-hidden="true">👥</span>
+                <div><strong id="statUsers">–</strong><span>Users</span></div>
+              </div>
+              <div class="admin-stat-card stat-money">
+                <span class="admin-stat-icon" aria-hidden="true">📈</span>
+                <div><strong id="statConfirmed">–</strong><span>Confirmed deposits</span></div>
+              </div>
+              <div class="admin-stat-card stat-sms">
+                <span class="admin-stat-icon" aria-hidden="true">✉️</span>
+                <div><strong id="statUnmatchedSms">–</strong><span>Unmatched SMS</span></div>
+              </div>
+            </section>
+
+            <!-- Tabs -->
+            <nav class="admin-tabs" aria-label="Admin sections">
+              <button type="button" class="admin-tab is-active" data-admin-tab="deposits">Deposits</button>
+              <button type="button" class="admin-tab" data-admin-tab="withdrawals">Withdrawals</button>
+              <button type="button" class="admin-tab" data-admin-tab="users">Users</button>
+              <button type="button" class="admin-tab" data-admin-tab="sms">SMS log</button>
+              <button type="button" class="admin-tab" data-admin-tab="fortune">Fortune</button>
+            </nav>
+
+            <!-- Deposits tab -->
+            <section class="admin-tab-panel" data-admin-panel="deposits">
+              <div class="transfer-history deposit-history-panel">
+                <div class="history-header">
+                  <span>Deposit queue</span>
+                  <button type="button" class="history-retry" data-refresh="deposits">Refresh</button>
+                </div>
+                <ul class="history-list admin-list" id="adminQueue" aria-live="polite">
+                  <li><div><strong>Loading…</strong></div></li>
+                </ul>
+              </div>
+
+              <div class="transfer-history deposit-history-panel admin-sub-panel">
+                <div class="history-header"><span>Process a payment SMS</span></div>
+                <form id="smsForm" class="inline-form deposit-form deposit-form-panel">
+                  <label for="smsSender">Sender (optional)</label>
+                  <input id="smsSender" type="text" autocomplete="off" placeholder="e.g. MTN" />
+                  <label for="smsBody">SMS text</label>
+                  <textarea id="smsBody" rows="3" autocomplete="off" placeholder="Paste the full payment confirmation SMS" required></textarea>
+                  <button type="submit" class="submit-btn small-btn">Process SMS</button>
+                  <small>Matches a pending deposit by amount + payer number and credits it instantly.</small>
+                </form>
+                <p id="smsMessage" class="form-message" aria-live="polite"></p>
+              </div>
+            </section>
+
+            <!-- Withdrawals tab -->
+            <section class="admin-tab-panel" data-admin-panel="withdrawals" hidden>
+              <div class="transfer-history deposit-history-panel">
+                <div class="history-header">
+                  <span>Payout queue</span>
+                  <button type="button" class="history-retry" data-refresh="withdrawals">Refresh</button>
+                </div>
+                <p class="admin-duty-note">Approve <strong>only after</strong> you have sent the money from your mobile money account. Rejecting returns the reserved amount to the user's available balance.</p>
+                <ul class="history-list admin-list" id="adminWithdrawals" aria-live="polite">
+                  <li><div><strong>Loading…</strong></div></li>
+                </ul>
+              </div>
+            </section>
+
+            <!-- Users tab -->
+            <section class="admin-tab-panel" data-admin-panel="users" hidden>
+              <div class="transfer-history deposit-history-panel">
+                <div class="history-header">
+                  <span>Users</span>
+                  <button type="button" class="history-retry" data-refresh="users">Refresh</button>
+                </div>
+                <ul class="history-list admin-list" id="adminUsers" aria-live="polite">
+                  <li><div><strong>Loading…</strong></div></li>
+                </ul>
+              </div>
+            </section>
+
+            <!-- SMS log tab -->
+            <section class="admin-tab-panel" data-admin-panel="sms" hidden>
+              <div class="transfer-history deposit-history-panel">
+                <div class="history-header">
+                  <span>Recent SMS activity</span>
+                  <button type="button" class="history-retry" data-refresh="sms">Refresh</button>
+                </div>
+                <ul class="history-list admin-list" id="adminSmsLog" aria-live="polite">
+                  <li><div><strong>Loading…</strong></div></li>
+                </ul>
+              </div>
+            </section>
+
+            <!-- Fortune tab -->
+            <section class="admin-tab-panel" data-admin-panel="fortune" hidden>
+              <div class="transfer-history deposit-history-panel admin-sub-panel">
+                <div class="history-header"><span>Issue a fortune code</span></div>
+                <form id="fortuneForm" class="inline-form deposit-form deposit-form-panel">
+                  <label for="fortuneAmount">Amount (UGX)</label>
+                  <input id="fortuneAmount" type="number" min="1" step="1" placeholder="e.g. 500" required />
+                  <button type="submit" class="submit-btn small-btn">Generate code</button>
+                  <small>Each code can be claimed by up to 10 different clients. Every successful claim credits the client's withdrawable balance.</small>
+                </form>
+                <p id="fortuneMessage" class="form-message" aria-live="polite"></p>
+              </div>
+              <div class="transfer-history deposit-history-panel admin-sub-panel">
+                <div class="history-header">
+                  <span>Recent codes</span>
+                  <button type="button" class="history-retry" data-refresh="fortune">Refresh</button>
+                </div>
+                <ul class="history-list admin-list" id="adminFortuneList" aria-live="polite">
+                  <li><div><strong>Loading…</strong></div></li>
+                </ul>
+              </div>
+            </section>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <script src="xp-config.js?v=1"></script>
+    <script src="admin.js?v=11" defer></script>
+  </body>
+</html>
