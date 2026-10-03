@@ -16,6 +16,7 @@ import { fileURLToPath, pathToFileURL } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const PUBLIC_DIR = path.join(__dirname, 'public');
 const PORT = Number(process.env.PORT) || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || '';
 const ADMIN_KEY = process.env.FORTUNE_ADMIN_KEY || process.env.ADMIN_KEY || '';
@@ -478,7 +479,7 @@ for (const method of ['get', 'post', 'put', 'patch', 'delete', 'all']) {
 
 app.get('/api/health', async (req, res) => {
   await get('SELECT 1 AS database_ready');
-  res.json({ ok: true, database: 'connected', message: 'XPLODE backend is running.' });
+  res.json({ ok: true, message: 'XPLODE backend is running.' });
 });
 
 app.get('/api/config', (req, res) => {
@@ -782,13 +783,13 @@ app.get('/api/withdrawals', authMiddleware, async (req, res) => {
 });
 
 app.get('/api/team', authMiddleware, async (req, res) => {
-  const direct = await get('SELECT COUNT(*) AS count FROM users WHERE referred_by = ?', [req.user.id]).count;
-  const level2 = await get(
+  const direct = (await get('SELECT COUNT(*) AS count FROM users WHERE referred_by = ?', [req.user.id])).count;
+  const level2 = (await get(
     `SELECT COUNT(*) AS count FROM users AS l2
      JOIN users AS l1 ON l1.id = l2.referred_by
      WHERE l1.referred_by = ?`,
     [req.user.id]
-  ).count;
+  )).count;
 
   return res.json({
     success: true,
@@ -822,27 +823,27 @@ app.post('/api/rewards/claim', authMiddleware, (req, res) => {
 });
 
 app.get('/api/toonhub/status', authMiddleware, async (req, res) => {
-  const activeLevels = new Set(await all(
+  const activeLevels = new Set((await all(
     "SELECT level FROM toon_subscriptions WHERE user_id = ? AND status = 'active'",
     [req.user.id]
-  ).map((row) => Number(row.level)));
-  const pendingLevels = new Set(await all(
+  )).map((row) => Number(row.level)));
+  const pendingLevels = new Set((await all(
     "SELECT level FROM toon_subscriptions WHERE user_id = ? AND status = 'payment_required'",
     [req.user.id]
-  ).map((row) => Number(row.level)));
+  )).map((row) => Number(row.level)));
   const today = getKampalaDate();
-  const claimedLevels = new Set(await all(
+  const claimedLevels = new Set((await all(
     'SELECT level FROM toon_reward_claims WHERE user_id = ? AND claim_date = ?',
     [req.user.id, today]
-  ).map((row) => Number(row.level)));
-  const watchedLevels = new Set(await all(
+  )).map((row) => Number(row.level)));
+  const watchedLevels = new Set((await all(
     'SELECT level FROM toon_watch_sessions WHERE user_id = ? AND watch_date = ? AND completed_at IS NOT NULL',
     [req.user.id, today]
-  ).map((row) => Number(row.level)));
-  const startedLevels = new Set(await all(
+  )).map((row) => Number(row.level)));
+  const startedLevels = new Set((await all(
     'SELECT level FROM toon_watch_sessions WHERE user_id = ? AND watch_date = ?',
     [req.user.id, today]
-  ).map((row) => Number(row.level)));
+  )).map((row) => Number(row.level)));
   const levels = Object.entries(TOON_LEVELS).map(([level, details]) => ({
     level: Number(level),
     amount: details.amount,
@@ -1123,7 +1124,7 @@ app.post('/api/admin/deposits/:id/approve', adminMiddleware, async (req, res) =>
   if (result.error) {
     return res.status(result.error).json({ success: false, message: result.message });
   }
-  const username = await get('SELECT username FROM users WHERE id = ?', [result.deposit.user_id])?.username || 'unknown';
+  const username = (await get('SELECT username FROM users WHERE id = ?', [result.deposit.user_id]))?.username || 'unknown';
   const approvalMessage = result.activatedLevel
     ? `Deposit #${result.deposit.id} confirmed. UGX ${Number(result.deposit.amount).toLocaleString()} VIP ${result.activatedLevel} subscription activated for @${username} (reserved, not withdrawable).`
     : `Deposit #${result.deposit.id} confirmed. UGX ${Number(result.deposit.amount).toLocaleString()} credited to @${username}.`;
@@ -1523,10 +1524,10 @@ app.post('/api/fortune/redeem', authMiddleware, async (req, res) => {
     );
     if (priorClaim) return { error: 'You have already redeemed this fortune code.' };
 
-    const claimedCount = await get(
+    const claimedCount = (await get(
       'SELECT COUNT(*) AS count FROM fortune_redemptions WHERE fortune_code_id = ?',
       [fortuneCode.id]
-    ).count;
+    )).count;
     if (claimedCount >= fortuneCode.max_redemptions) return { error: 'This fortune code has already been claimed by 10 clients.' };
 
     await run(
@@ -1638,7 +1639,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.static(__dirname, {
+app.use(express.static(PUBLIC_DIR, {
   index: false,
   dotfiles: 'ignore',
   setHeaders: (res, filePath) => {
@@ -1655,7 +1656,7 @@ app.use(express.static(__dirname, {
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) return res.status(404).json({ success: false, message: 'API endpoint not found.' });
   res.setHeader('Cache-Control', 'no-cache');
-  res.sendFile(path.join(__dirname, 'index.html'));
+  res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
 });
 
 // Malformed JSON and unexpected errors must return JSON, not an HTML stack page.
