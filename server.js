@@ -771,26 +771,28 @@ app.post('/api/wallet/withdraw', authMiddleware, async (req, res) => {
 });
 
 app.get('/api/withdrawals', authMiddleware, async (req, res) => {
-  const rows = await all(
-    `SELECT id, amount, status, account_provider, account_name, account_number, created_at FROM withdrawal_requests WHERE user_id = ?
-     UNION ALL
-     SELECT id, amount, status, NULL AS account_provider, NULL AS account_name, NULL AS account_number, created_at FROM transactions WHERE user_id = ? AND type = 'withdrawal'
-     ORDER BY created_at DESC LIMIT 20`,
-    [req.user.id, req.user.id]
-  );
-  const pending = await get(
-    `SELECT COALESCE(SUM(amount), 0) AS amount
-     FROM withdrawal_requests WHERE user_id = ? AND status = 'pending'`,
-    [req.user.id]
-  );
-  const wallet = await getWallet(req.user.id);
+  const [rows, pending, wallet, lastRequest] = await Promise.all([
+    all(
+      `SELECT id, amount, status, account_provider, account_name, account_number, created_at FROM withdrawal_requests WHERE user_id = ?
+       UNION ALL
+       SELECT id, amount, status, NULL AS account_provider, NULL AS account_name, NULL AS account_number, created_at FROM transactions WHERE user_id = ? AND type = 'withdrawal'
+       ORDER BY created_at DESC LIMIT 20`,
+      [req.user.id, req.user.id]
+    ),
+    get(
+      `SELECT COALESCE(SUM(amount), 0) AS amount
+       FROM withdrawal_requests WHERE user_id = ? AND status = 'pending'`,
+      [req.user.id]
+    ),
+    getWallet(req.user.id),
+    get(
+      'SELECT created_at FROM withdrawal_requests WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 1',
+      [req.user.id]
+    )
+  ]);
   const pendingWithdrawals = Number(pending.amount) || 0;
 
   let nextWithdrawalAt = null;
-  const lastRequest = await get(
-    'SELECT created_at FROM withdrawal_requests WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 1',
-    [req.user.id]
-  );
   if (lastRequest) {
     const lastTime = new Date(`${String(lastRequest.created_at).replace(' ', 'T')}Z`).getTime();
     if (!Number.isNaN(lastTime)) {
@@ -809,13 +811,17 @@ app.get('/api/withdrawals', authMiddleware, async (req, res) => {
 });
 
 app.get('/api/team', authMiddleware, async (req, res) => {
-  const direct = (await get('SELECT COUNT(*) AS count FROM users WHERE referred_by = ?', [req.user.id])).count;
-  const level2 = (await get(
-    `SELECT COUNT(*) AS count FROM users AS l2
-     JOIN users AS l1 ON l1.id = l2.referred_by
-     WHERE l1.referred_by = ?`,
-    [req.user.id]
-  )).count;
+  const [directResult, level2Result] = await Promise.all([
+    get('SELECT COUNT(*) AS count FROM users WHERE referred_by = ?', [req.user.id]),
+    get(
+      `SELECT COUNT(*) AS count FROM users AS l2
+       JOIN users AS l1 ON l1.id = l2.referred_by
+       WHERE l1.referred_by = ?`,
+      [req.user.id]
+    )
+  ]);
+  const direct = Number(directResult.count);
+  const level2 = Number(level2Result.count);
 
   return res.json({
     success: true,
@@ -849,27 +855,19 @@ app.post('/api/rewards/claim', authMiddleware, (req, res) => {
 });
 
 app.get('/api/toonhub/status', authMiddleware, async (req, res) => {
-  const activeLevels = new Set((await all(
-    "SELECT level FROM toon_subscriptions WHERE user_id = ? AND status = 'active'",
-    [req.user.id]
-  )).map((row) => Number(row.level)));
-  const pendingLevels = new Set((await all(
-    "SELECT level FROM toon_subscriptions WHERE user_id = ? AND status = 'payment_required'",
-    [req.user.id]
-  )).map((row) => Number(row.level)));
   const today = getKampalaDate();
-  const claimedLevels = new Set((await all(
-    'SELECT level FROM toon_reward_claims WHERE user_id = ? AND claim_date = ?',
-    [req.user.id, today]
-  )).map((row) => Number(row.level)));
-  const watchedLevels = new Set((await all(
-    'SELECT level FROM toon_watch_sessions WHERE user_id = ? AND watch_date = ? AND completed_at IS NOT NULL',
-    [req.user.id, today]
-  )).map((row) => Number(row.level)));
-  const startedLevels = new Set((await all(
-    'SELECT level FROM toon_watch_sessions WHERE user_id = ? AND watch_date = ?',
-    [req.user.id, today]
-  )).map((row) => Number(row.level)));
+  const [activeRows, pendingRows, claimedRows, watchedRows, startedRows] = await Promise.all([
+    all("SELECT level FROM toon_subscriptions WHERE user_id = ? AND status = 'active'", [req.user.id]),
+    all("SELECT level FROM toon_subscriptions WHERE user_id = ? AND status = 'payment_required'", [req.user.id]),
+    all('SELECT level FROM toon_reward_claims WHERE user_id = ? AND claim_date = ?', [req.user.id, today]),
+    all('SELECT level FROM toon_watch_sessions WHERE user_id = ? AND watch_date = ? AND completed_at IS NOT NULL', [req.user.id, today]),
+    all('SELECT level FROM toon_watch_sessions WHERE user_id = ? AND watch_date = ?', [req.user.id, today])
+  ]);
+  const activeLevels = new Set(activeRows.map((row) => Number(row.level)));
+  const pendingLevels = new Set(pendingRows.map((row) => Number(row.level)));
+  const claimedLevels = new Set(claimedRows.map((row) => Number(row.level)));
+  const watchedLevels = new Set(watchedRows.map((row) => Number(row.level)));
+  const startedLevels = new Set(startedRows.map((row) => Number(row.level)));
   const levels = Object.entries(TOON_LEVELS).map(([level, details]) => ({
     level: Number(level),
     amount: details.amount,
@@ -1175,27 +1173,30 @@ app.post('/api/admin/deposits/:id/reject', adminMiddleware, async (req, res) => 
 
 // --- Admin dashboard data & withdrawal payouts ------------------------------
 app.get('/api/admin/stats', adminMiddleware, async (req, res) => {
-  const pendingDeposits = await get(`SELECT COUNT(*) AS count, COALESCE(SUM(amount), 0) AS amount FROM deposit_requests WHERE status = 'pending'`);
-  const pendingWithdrawals = await get(`SELECT COUNT(*) AS count, COALESCE(SUM(amount), 0) AS amount FROM withdrawal_requests WHERE status = 'pending'`);
-  const users = await get('SELECT COUNT(*) AS count FROM users');
-  const confirmedDeposits = await get(`SELECT COALESCE(SUM(amount), 0) AS amount FROM deposit_requests WHERE status = 'confirmed'`);
-  const paidWithdrawals = await get(`SELECT COALESCE(SUM(amount), 0) AS amount FROM withdrawal_requests WHERE status = 'paid'`);
-  const fortune = await get(
-    `SELECT COUNT(DISTINCT f.id) AS issued, COALESCE(SUM(f.amount), 0) AS redeemed
-     FROM fortune_codes f LEFT JOIN fortune_redemptions r ON r.fortune_code_id = f.id`
-  );
-  const unmatchedSms = await get(`SELECT COUNT(*) AS count FROM sms_log WHERE action = 'no_match'`);
+  const stats = await get(`
+    SELECT
+      (SELECT COUNT(*) FROM users) AS users,
+      (SELECT COUNT(*) FROM deposit_requests WHERE status = 'pending') AS pending_deposit_count,
+      (SELECT COALESCE(SUM(amount), 0) FROM deposit_requests WHERE status = 'pending') AS pending_deposit_amount,
+      (SELECT COUNT(*) FROM withdrawal_requests WHERE status = 'pending') AS pending_withdrawal_count,
+      (SELECT COALESCE(SUM(amount), 0) FROM withdrawal_requests WHERE status = 'pending') AS pending_withdrawal_amount,
+      (SELECT COALESCE(SUM(amount), 0) FROM deposit_requests WHERE status = 'confirmed') AS confirmed_deposits,
+      (SELECT COALESCE(SUM(amount), 0) FROM withdrawal_requests WHERE status = 'paid') AS paid_withdrawals,
+      (SELECT COUNT(DISTINCT f.id) FROM fortune_codes f LEFT JOIN fortune_redemptions r ON r.fortune_code_id = f.id) AS fortune_issued,
+      (SELECT COALESCE(SUM(f.amount), 0) FROM fortune_codes f LEFT JOIN fortune_redemptions r ON r.fortune_code_id = f.id) AS fortune_redeemed,
+      (SELECT COUNT(*) FROM sms_log WHERE action = 'no_match') AS unmatched_sms
+  `);
 
   return res.json({
     success: true,
     stats: {
-      users: users.count,
-      pendingDeposits: { count: pendingDeposits.count, amount: Number(pendingDeposits.amount) },
-      pendingWithdrawals: { count: pendingWithdrawals.count, amount: Number(pendingWithdrawals.amount) },
-      confirmedDeposits: Number(confirmedDeposits.amount),
-      paidWithdrawals: Number(paidWithdrawals.amount),
-      fortuneCodes: { issued: fortune.issued, redeemed: Number(fortune.redeemed) },
-      unmatchedSms: unmatchedSms.count
+      users: stats.users,
+      pendingDeposits: { count: stats.pending_deposit_count, amount: Number(stats.pending_deposit_amount) },
+      pendingWithdrawals: { count: stats.pending_withdrawal_count, amount: Number(stats.pending_withdrawal_amount) },
+      confirmedDeposits: Number(stats.confirmed_deposits),
+      paidWithdrawals: Number(stats.paid_withdrawals),
+      fortuneCodes: { issued: stats.fortune_issued, redeemed: Number(stats.fortune_redeemed) },
+      unmatchedSms: stats.unmatched_sms
     }
   });
 });
