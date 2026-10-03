@@ -39,6 +39,7 @@ if (!JWT_SECRET) {
 const DEV_JWT_SECRET = 'xplode-dev-secret';
 const WITHDRAWAL_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 const MAX_JSON_BODY = '16kb';
+const DATABASE_SCHEMA_VERSION = 1;
 const TOON_WATCH_SECONDS = 6;
 const getKampalaDate = () => {
   const parts = new Intl.DateTimeFormat('en', {
@@ -372,37 +373,60 @@ const generateFortuneCode = async () => {
   throw new Error('Unable to generate a unique fortune code.');
 };
 
-await createTables();
+const ensureAdminAccount = async () => {
+  if (await get("SELECT id FROM users WHERE role = 'admin' LIMIT 1")) return;
 
-// One dedicated admin account with unique login details. The system recognizes
-// it at login and takes the operator straight to the admin dashboard. Configure
-// via ADMIN_USERNAME / ADMIN_EMAIL / ADMIN_PASSWORD / ADMIN_PIN; when the
-// password is unset a random one is generated and printed to this log once.
-await tryAddColumn('users', 'role', "TEXT NOT NULL DEFAULT 'client'");
-if (!await get("SELECT id FROM users WHERE role = 'admin' LIMIT 1")) {
   const adminUsername = process.env.ADMIN_USERNAME || 'admin';
-  if (!await get('SELECT id FROM users WHERE username = ?', [adminUsername])) {
-    const adminPassword = process.env.ADMIN_PASSWORD || randomBytes(9).toString('base64url');
-    await run(
-      `INSERT INTO users (username, password_hash, full_name, email, mobile, invite_code, pin_hash, role)
-       VALUES (?, ?, 'XPLODE Admin', ?, ?, ?, ?, 'admin')`,
-      [
-        adminUsername,
-        bcrypt.hashSync(adminPassword, 10),
-        process.env.ADMIN_EMAIL || 'admin@xplode.local',
-        process.env.ADMIN_MOBILE || '0000000000',
-        `ADM-${randomBytes(3).toString('hex').toUpperCase()}`,
-        bcrypt.hashSync(process.env.ADMIN_PIN || '00000', 10)
-      ]
-    );
-    if (process.env.ADMIN_PASSWORD) {
-      console.log(`Admin account ready — sign in as "${adminUsername}".`);
-    } else {
-      console.log(`\n  Admin account created — username: ${adminUsername}  password: ${adminPassword}`);
-      console.log('  Save it now; it is only printed once.\n');
+  if (await get('SELECT id FROM users WHERE username = ?', [adminUsername])) return;
+
+  const adminPassword = process.env.ADMIN_PASSWORD || randomBytes(9).toString('base64url');
+  await run(
+    `INSERT INTO users (username, password_hash, full_name, email, mobile, invite_code, pin_hash, role)
+     VALUES (?, ?, 'XPLODE Admin', ?, ?, ?, ?, 'admin')`,
+    [
+      adminUsername,
+      bcrypt.hashSync(adminPassword, 10),
+      process.env.ADMIN_EMAIL || 'admin@xplode.local',
+      process.env.ADMIN_MOBILE || '0000000000',
+      `ADM-${randomBytes(3).toString('hex').toUpperCase()}`,
+      bcrypt.hashSync(process.env.ADMIN_PIN || '00000', 10)
+    ]
+  );
+  if (process.env.ADMIN_PASSWORD) {
+    console.log(`Admin account ready — sign in as "${adminUsername}".`);
+  } else {
+    console.log(`\n  Admin account created — username: ${adminUsername}  password: ${adminPassword}`);
+    console.log('  Save it now; it is only printed once.\n');
+  }
+};
+
+const initializeDatabase = async () => {
+  let schemaVersion = 0;
+  if (remoteDatabaseEnabled) {
+    try {
+      const version = await get("SELECT value FROM app_meta WHERE key = 'schema_version'");
+      schemaVersion = Number(version?.value) || 0;
+    } catch (error) {
+      if (!String(error.message).toLowerCase().includes('no such table')) throw error;
     }
   }
-}
+
+  if (!remoteDatabaseEnabled || schemaVersion < DATABASE_SCHEMA_VERSION) {
+    await createTables();
+    await tryAddColumn('users', 'role', "TEXT NOT NULL DEFAULT 'client'");
+    await ensureAdminAccount();
+    if (remoteDatabaseEnabled) {
+      await run('CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+      await run(
+        `INSERT INTO app_meta (key, value) VALUES ('schema_version', ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+        [String(DATABASE_SCHEMA_VERSION)]
+      );
+    }
+  }
+};
+
+await initializeDatabase();
 
 const sanitizeUser = (user) => {
   if (!user) return null;
