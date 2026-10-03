@@ -7,6 +7,8 @@ import rateLimit from 'express-rate-limit';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import Database from 'better-sqlite3';
+import { connect } from '@tursodatabase/serverless';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { normalizeFortuneAmount, normalizeFortuneCode } from './fortuneLogic.js';
 import path from 'path';
@@ -99,24 +101,67 @@ const authLimiter = rateLimit({
 
 app.use('/api', apiLimiter);
 
-const db = new Database(process.env.DB_PATH || path.join(__dirname, 'xplode.db'));
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+const remoteDatabaseEnabled = Boolean(process.env.TURSO_DATABASE_URL && process.env.TURSO_AUTH_TOKEN);
+const localDb = remoteDatabaseEnabled ? null : new Database(process.env.DB_PATH || path.join(__dirname, 'xplode.db'));
+localDb?.pragma('journal_mode = WAL');
+localDb?.pragma('foreign_keys = ON');
+const remoteDb = remoteDatabaseEnabled ? connect({ url: process.env.TURSO_DATABASE_URL, authToken: process.env.TURSO_AUTH_TOKEN }) : null;
+const transactionContext = new AsyncLocalStorage();
+if (remoteDatabaseEnabled) await (await remoteDb.prepare('PRAGMA foreign_keys = ON')).run();
+let localQueue = Promise.resolve();
+const withLocalLock = async (callback) => {
+  const previous = localQueue;
+  let release;
+  localQueue = new Promise((resolve) => { release = resolve; });
+  await previous;
+  try { return await callback(); } finally { release(); }
+};
+const execute = async (method, sql, params = []) => {
+  const transaction = transactionContext.getStore();
+  if (remoteDatabaseEnabled) {
+    const statement = await (transaction || remoteDb).prepare(sql);
+    const result = await statement[method](params);
+    if (method === 'run') return { changes: Number(result.changes || 0), lastInsertRowid: Number(result.lastInsertRowid || 0) };
+    return result;
+  }
+  const perform = () => localDb.prepare(sql)[method === 'run' ? 'run' : method](...params);
+  return transaction === localDb ? perform() : withLocalLock(perform);
+};
+const run = async (sql, params = []) => execute('run', sql, params);
+const get = async (sql, params = []) => execute('get', sql, params);
+const all = async (sql, params = []) => execute('all', sql, params);
+const withTransaction = async (callback) => {
+  if (transactionContext.getStore()) return callback();
+  if (remoteDatabaseEnabled) {
+    return remoteDb.transactionAsync(async (tx) => {
+      await (await tx.prepare('PRAGMA foreign_keys = ON')).run();
+      return transactionContext.run(tx, callback);
+    })();
+  }
+  return withLocalLock(async () => {
+    localDb.exec('BEGIN IMMEDIATE');
+    try {
+      const result = await transactionContext.run(localDb, callback);
+      localDb.exec('COMMIT');
+      return result;
+    } catch (error) {
+      localDb.exec('ROLLBACK');
+      throw error;
+    }
+  });
+};
+const db = { transaction: (callback) => (...args) => withTransaction(() => callback(...args)) };
 
-const run = (sql, params = []) => db.prepare(sql).run(...params);
-const get = (sql, params = []) => db.prepare(sql).get(...params);
-const all = (sql, params = []) => db.prepare(sql).all(...params);
-
-const tryAddColumn = (table, column, definition) => {
+const tryAddColumn = async (table, column, definition) => {
   try {
-    run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    await run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
   } catch (error) {
     if (!String(error.message).includes('duplicate column name')) throw error;
   }
 };
 
-const createTables = () => {
-  run(`
+const createTables = async () => {
+  await run(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT UNIQUE NOT NULL,
@@ -130,7 +175,7 @@ const createTables = () => {
     )
   `);
 
-  run(`
+  await run(`
     CREATE TABLE IF NOT EXISTS wallets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER UNIQUE NOT NULL,
@@ -142,7 +187,7 @@ const createTables = () => {
     )
   `);
 
-  run(`
+  await run(`
     CREATE TABLE IF NOT EXISTS transactions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -154,7 +199,7 @@ const createTables = () => {
     )
   `);
 
-  run(`
+  await run(`
     CREATE TABLE IF NOT EXISTS deposit_requests (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -167,7 +212,7 @@ const createTables = () => {
     )
   `);
 
-  run(`
+  await run(`
     CREATE TABLE IF NOT EXISTS withdrawal_requests (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -178,7 +223,7 @@ const createTables = () => {
     )
   `);
 
-  run(`
+  await run(`
     CREATE TABLE IF NOT EXISTS reward_claims (
       user_id INTEGER PRIMARY KEY,
       bonus INTEGER NOT NULL,
@@ -187,7 +232,7 @@ const createTables = () => {
     )
   `);
 
-  run(`
+  await run(`
     CREATE TABLE IF NOT EXISTS plan_selections (
       user_id INTEGER PRIMARY KEY,
       plan TEXT NOT NULL CHECK (plan IN ('basic', 'premium', 'vip')),
@@ -197,7 +242,7 @@ const createTables = () => {
     )
   `);
 
-  run(`
+  await run(`
     CREATE TABLE IF NOT EXISTS toon_subscriptions (
       user_id INTEGER NOT NULL,
       level INTEGER NOT NULL CHECK (level BETWEEN 1 AND 3),
@@ -211,7 +256,7 @@ const createTables = () => {
     )
   `);
 
-  run(`
+  await run(`
     CREATE TABLE IF NOT EXISTS toon_reward_claims (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -224,7 +269,7 @@ const createTables = () => {
     )
   `);
 
-  run(`
+  await run(`
     CREATE TABLE IF NOT EXISTS toon_watch_sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -237,9 +282,9 @@ const createTables = () => {
     )
   `);
 
-  tryAddColumn('toon_watch_sessions', 'completed_at', 'TEXT');
+  await tryAddColumn('toon_watch_sessions', 'completed_at', 'TEXT');
 
-  run(`
+  await run(`
     CREATE TABLE IF NOT EXISTS fortune_codes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       code TEXT NOT NULL COLLATE NOCASE UNIQUE,
@@ -252,9 +297,9 @@ const createTables = () => {
     )
   `);
 
-  tryAddColumn('fortune_codes', 'max_redemptions', 'INTEGER NOT NULL DEFAULT 10');
+  await tryAddColumn('fortune_codes', 'max_redemptions', 'INTEGER NOT NULL DEFAULT 10');
 
-  run(`
+  await run(`
     CREATE TABLE IF NOT EXISTS fortune_redemptions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       fortune_code_id INTEGER NOT NULL,
@@ -265,20 +310,20 @@ const createTables = () => {
       FOREIGN KEY (user_id) REFERENCES users(id)
     )
   `);
-  run(
+  await run(
     `INSERT OR IGNORE INTO fortune_redemptions (fortune_code_id, user_id, redeemed_at)
      SELECT id, redeemed_by, COALESCE(redeemed_at, created_at)
      FROM fortune_codes WHERE redeemed_by IS NOT NULL`
   );
 
-  tryAddColumn('users', 'referred_by', 'TEXT');
-  tryAddColumn('users', 'role', "TEXT NOT NULL DEFAULT 'client'");
-  tryAddColumn('withdrawal_requests', 'account_provider', 'TEXT');
-  tryAddColumn('withdrawal_requests', 'account_name', 'TEXT');
-  tryAddColumn('withdrawal_requests', 'account_number', 'TEXT');
-  tryAddColumn('deposit_requests', 'payer_number', 'TEXT');
+  await tryAddColumn('users', 'referred_by', 'TEXT');
+  await tryAddColumn('users', 'role', "TEXT NOT NULL DEFAULT 'client'");
+  await tryAddColumn('withdrawal_requests', 'account_provider', 'TEXT');
+  await tryAddColumn('withdrawal_requests', 'account_name', 'TEXT');
+  await tryAddColumn('withdrawal_requests', 'account_number', 'TEXT');
+  await tryAddColumn('deposit_requests', 'payer_number', 'TEXT');
 
-  run(`
+  await run(`
     CREATE TABLE IF NOT EXISTS sms_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       sender TEXT,
@@ -292,50 +337,50 @@ const createTables = () => {
   `);
 
   try {
-    run('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_invite_code ON users(invite_code)');
+    await run('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_invite_code ON users(invite_code)');
   } catch (error) {
     // Existing databases may hold duplicate invite codes; regenerate them below and retry.
-    const duplicates = all(
+    const duplicates = await all(
       `SELECT invite_code FROM users WHERE invite_code IS NOT NULL
        GROUP BY invite_code HAVING COUNT(*) > 1`
     );
     for (const duplicate of duplicates) {
-      for (const row of all('SELECT id FROM users WHERE invite_code = ? AND id > (SELECT MIN(id) FROM users WHERE invite_code = ?)', [duplicate.invite_code, duplicate.invite_code])) {
-        run('UPDATE users SET invite_code = ? WHERE id = ?', [generateInviteCode(), row.id]);
+      for (const row of await all('SELECT id FROM users WHERE invite_code = ? AND id > (SELECT MIN(id) FROM users WHERE invite_code = ?)', [duplicate.invite_code, duplicate.invite_code])) {
+        await run('UPDATE users SET invite_code = ? WHERE id = ?', [await generateInviteCode(), row.id]);
       }
     }
-    run('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_invite_code ON users(invite_code)');
+    await run('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_invite_code ON users(invite_code)');
   }
 };
 
-const generateInviteCode = () => {
+const generateInviteCode = async () => {
   for (let attempt = 0; attempt < 20; attempt += 1) {
     const code = String(Math.floor(100000 + Math.random() * 900000));
-    if (!get('SELECT id FROM users WHERE invite_code = ?', [code])) return code;
+    if (!await get('SELECT id FROM users WHERE invite_code = ?', [code])) return code;
   }
   return `X${Date.now().toString(36).toUpperCase().slice(-7)}`;
 };
 
-const generateFortuneCode = () => {
+const generateFortuneCode = async () => {
   for (let attempt = 0; attempt < 20; attempt += 1) {
     const code = `FORT-${randomBytes(4).toString('hex').toUpperCase()}`;
-    if (!get('SELECT id FROM fortune_codes WHERE code = ?', [code])) return code;
+    if (!await get('SELECT id FROM fortune_codes WHERE code = ?', [code])) return code;
   }
   throw new Error('Unable to generate a unique fortune code.');
 };
 
-createTables();
+await createTables();
 
 // One dedicated admin account with unique login details. The system recognizes
 // it at login and takes the operator straight to the admin dashboard. Configure
 // via ADMIN_USERNAME / ADMIN_EMAIL / ADMIN_PASSWORD / ADMIN_PIN; when the
 // password is unset a random one is generated and printed to this log once.
-tryAddColumn('users', 'role', "TEXT NOT NULL DEFAULT 'client'");
-if (!get("SELECT id FROM users WHERE role = 'admin' LIMIT 1")) {
+await tryAddColumn('users', 'role', "TEXT NOT NULL DEFAULT 'client'");
+if (!await get("SELECT id FROM users WHERE role = 'admin' LIMIT 1")) {
   const adminUsername = process.env.ADMIN_USERNAME || 'admin';
-  if (!get('SELECT id FROM users WHERE username = ?', [adminUsername])) {
+  if (!await get('SELECT id FROM users WHERE username = ?', [adminUsername])) {
     const adminPassword = process.env.ADMIN_PASSWORD || randomBytes(9).toString('base64url');
-    run(
+    await run(
       `INSERT INTO users (username, password_hash, full_name, email, mobile, invite_code, pin_hash, role)
        VALUES (?, ?, 'XPLODE Admin', ?, ?, ?, ?, 'admin')`,
       [
@@ -362,19 +407,19 @@ const sanitizeUser = (user) => {
   return safe;
 };
 
-const getWallet = (userId) => {
-  return get('SELECT * FROM wallets WHERE user_id = ?', [userId]) || { user_id: userId, withdrawable: 0, total: 0, pending: 0 };
+const getWallet = async (userId) => {
+  return await get('SELECT * FROM wallets WHERE user_id = ?', [userId]) || { user_id: userId, withdrawable: 0, total: 0, pending: 0 };
 };
 
-const createWalletIfMissing = (userId) => {
-  run(
+const createWalletIfMissing = async (userId) => {
+  await run(
     `INSERT INTO wallets (user_id, withdrawable, total, pending) VALUES (?, 0, 0, 0)
      ON CONFLICT(user_id) DO NOTHING`,
     [userId]
   );
 };
 
-const authMiddleware = (req, res, next) => {
+const authMiddleware = async (req, res, next) => {
   const authHeader = req.headers.authorization || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
 
@@ -384,7 +429,7 @@ const authMiddleware = (req, res, next) => {
 
   try {
     const payload = jwt.verify(token, JWT_SECRET || DEV_JWT_SECRET);
-    const user = get('SELECT * FROM users WHERE id = ?', [payload.userId]);
+    const user = await get('SELECT * FROM users WHERE id = ?', [payload.userId]);
     if (!user) {
       return res.status(401).json({ success: false, message: 'User not found.' });
     }
@@ -395,14 +440,14 @@ const authMiddleware = (req, res, next) => {
   }
 };
 
-const adminMiddleware = (req, res, next) => {
+const adminMiddleware = async (req, res, next) => {
   // Admin account session: a valid JWT whose user has the admin role.
   const authHeader = req.headers.authorization || '';
   const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
   if (bearerToken) {
     try {
       const payload = jwt.verify(bearerToken, JWT_SECRET || DEV_JWT_SECRET);
-      const adminUser = get('SELECT role FROM users WHERE id = ?', [payload.userId]);
+      const adminUser = await get('SELECT role FROM users WHERE id = ?', [payload.userId]);
       if (adminUser?.role === 'admin') {
         return next();
       }
@@ -425,15 +470,22 @@ const adminMiddleware = (req, res, next) => {
   next();
 };
 
-app.get('/api/health', (req, res) => {
-  res.json({ ok: true, message: 'XPLODE backend is running.' });
+const asyncHandler = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
+for (const method of ['get', 'post', 'put', 'patch', 'delete', 'all']) {
+  const register = app[method].bind(app);
+  app[method] = (...args) => register(...args.map((argument, index) => index > 0 && typeof argument === 'function' ? asyncHandler(argument) : argument));
+}
+
+app.get('/api/health', async (req, res) => {
+  await get('SELECT 1 AS database_ready');
+  res.json({ ok: true, database: 'connected', message: 'XPLODE backend is running.' });
 });
 
 app.get('/api/config', (req, res) => {
   return res.json({ success: true, depositAccounts: DEPOSIT_ACCOUNTS });
 });
 
-app.post('/api/login', authLimiter, (req, res) => {
+app.post('/api/login', authLimiter, async (req, res) => {
   const username = String(req.body.username || '').trim();
   const password = String(req.body.password || '');
 
@@ -441,14 +493,14 @@ app.post('/api/login', authLimiter, (req, res) => {
     return res.status(400).json({ success: false, message: 'Username and password are required.' });
   }
 
-  const user = get('SELECT * FROM users WHERE username = ?', [username]);
+  const user = await get('SELECT * FROM users WHERE username = ?', [username]);
   const validPassword = user && bcrypt.compareSync(password, user.password_hash);
   if (!validPassword) {
     return res.status(401).json({ success: false, message: 'Incorrect username or password.' });
   }
 
-  createWalletIfMissing(user.id);
-  const wallet = getWallet(user.id);
+  await createWalletIfMissing(user.id);
+  const wallet = await getWallet(user.id);
   const token = jwt.sign({ userId: user.id, username: user.username }, JWT_SECRET || DEV_JWT_SECRET, { expiresIn: '7d' });
 
   return res.json({
@@ -461,7 +513,7 @@ app.post('/api/login', authLimiter, (req, res) => {
   });
 });
 
-app.post('/api/register', authLimiter, (req, res) => {
+app.post('/api/register', authLimiter, async (req, res) => {
   const username = String(req.body.username || '').trim();
   const email = String(req.body.email || '').trim();
   const mobile = String(req.body.mobile || '').trim();
@@ -485,28 +537,28 @@ app.post('/api/register', authLimiter, (req, res) => {
     return res.status(400).json({ success: false, message: 'Enter a valid mobile money number.' });
   }
 
-  const inviter = inviteCodeInput ? get('SELECT id FROM users WHERE invite_code = ?', [inviteCodeInput]) : null;
+  const inviter = inviteCodeInput ? await get('SELECT id FROM users WHERE invite_code = ?', [inviteCodeInput]) : null;
   if (inviteCodeInput && !inviter) {
     return res.status(400).json({ success: false, message: 'Invalid invite code.' });
   }
 
-  const existingUser = get('SELECT id FROM users WHERE username = ?', [username]);
+  const existingUser = await get('SELECT id FROM users WHERE username = ?', [username]);
   if (existingUser) {
     return res.status(409).json({ success: false, message: 'Username already exists.' });
   }
 
   const passwordHash = bcrypt.hashSync(password, 10);
   const pinHash = bcrypt.hashSync(pin, 10);
-  const inviteCode = generateInviteCode();
+  const inviteCode = await generateInviteCode();
 
-  const registerTransaction = db.transaction(() => {
-    const userResult = run(
+  const registerTransaction = db.transaction(async () => {
+    const userResult = await run(
       `INSERT INTO users (username, password_hash, full_name, email, mobile, invite_code, pin_hash, referred_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [username, passwordHash, username, email, mobile, inviteCode, pinHash, inviter ? inviter.id : null]
     );
 
-    run(
+    await run(
       `INSERT INTO wallets (user_id, withdrawable, total, pending) VALUES (?, 0, 0, 0)`,
       [userResult.lastInsertRowid]
     );
@@ -514,11 +566,11 @@ app.post('/api/register', authLimiter, (req, res) => {
     return userResult.lastInsertRowid;
   });
 
-  const userId = registerTransaction();
+  const userId = await registerTransaction();
 
   const token = jwt.sign({ userId, username }, JWT_SECRET || DEV_JWT_SECRET, { expiresIn: '7d' });
-  const createdUser = get('SELECT * FROM users WHERE id = ?', [userId]);
-  const wallet = getWallet(userId);
+  const createdUser = await get('SELECT * FROM users WHERE id = ?', [userId]);
+  const wallet = await getWallet(userId);
 
   return res.status(201).json({
     success: true,
@@ -529,30 +581,30 @@ app.post('/api/register', authLimiter, (req, res) => {
   });
 });
 
-app.get('/api/me', authMiddleware, (req, res) => {
-  createWalletIfMissing(req.user.id);
-  const wallet = getWallet(req.user.id);
+app.get('/api/me', authMiddleware, async (req, res) => {
+  await createWalletIfMissing(req.user.id);
+  const wallet = await getWallet(req.user.id);
   return res.json({ success: true, user: req.user, wallet });
 });
 
-app.patch('/api/profile', authMiddleware, (req, res) => {
+app.patch('/api/profile', authMiddleware, async (req, res) => {
   const fullName = String(req.body.fullName || '').trim();
   if (fullName.length < 2 || fullName.length > 80) {
     return res.status(400).json({ success: false, message: 'Name must be between 2 and 80 characters.' });
   }
 
-  run('UPDATE users SET full_name = ? WHERE id = ?', [fullName, req.user.id]);
-  const user = get('SELECT * FROM users WHERE id = ?', [req.user.id]);
+  await run('UPDATE users SET full_name = ? WHERE id = ?', [fullName, req.user.id]);
+  const user = await get('SELECT * FROM users WHERE id = ?', [req.user.id]);
   return res.json({ success: true, message: 'Profile name updated.', user: sanitizeUser(user) });
 });
 
-app.get('/api/wallet', authMiddleware, (req, res) => {
-  createWalletIfMissing(req.user.id);
-  const wallet = getWallet(req.user.id);
+app.get('/api/wallet', authMiddleware, async (req, res) => {
+  await createWalletIfMissing(req.user.id);
+  const wallet = await getWallet(req.user.id);
   return res.json({ success: true, wallet });
 });
 
-app.post('/api/wallet/deposit', authMiddleware, (req, res) => {
+app.post('/api/wallet/deposit', authMiddleware, async (req, res) => {
   const amount = Number(req.body.amount);
   const provider = String(req.body.provider || '').trim();
   const transactionId = String(req.body.transactionId || '').trim();
@@ -570,25 +622,25 @@ app.post('/api/wallet/deposit', authMiddleware, (req, res) => {
     return res.status(400).json({ success: false, message: 'Enter a valid transaction ID from your payment SMS.' });
   }
 
-  const existingRequest = get('SELECT id FROM deposit_requests WHERE transaction_id = ?', [transactionId]);
+  const existingRequest = await get('SELECT id FROM deposit_requests WHERE transaction_id = ?', [transactionId]);
   if (existingRequest) {
     return res.status(409).json({ success: false, message: 'This transaction ID has already been submitted.' });
   }
 
   try {
-    const request = run(
+    const request = await run(
       `INSERT INTO deposit_requests (user_id, provider, amount, transaction_id, status, payer_number)
        VALUES (?, ?, ?, ?, 'pending', ?)`,
       [req.user.id, provider, amount, transactionId, payerNumber || null]
     );
-    run(
+    await run(
       `UPDATE toon_subscriptions SET deposit_id = ?, updated_at = CURRENT_TIMESTAMP
        WHERE user_id = ? AND amount = ? AND status = 'payment_required' AND deposit_id IS NULL
          AND level = (SELECT MIN(level) FROM toon_subscriptions
                       WHERE user_id = ? AND amount = ? AND status = 'payment_required' AND deposit_id IS NULL)`,
       [request.lastInsertRowid, req.user.id, amount, req.user.id, amount]
     );
-    const deposit = get('SELECT id, provider, amount, transaction_id, status, created_at FROM deposit_requests WHERE id = ?', [request.lastInsertRowid]);
+    const deposit = await get('SELECT id, provider, amount, transaction_id, status, created_at FROM deposit_requests WHERE id = ?', [request.lastInsertRowid]);
     return res.status(201).json({
       success: true,
       message: 'Deposit submitted for manual verification. Your balance will update after the payment is confirmed.',
@@ -602,8 +654,8 @@ app.post('/api/wallet/deposit', authMiddleware, (req, res) => {
   }
 });
 
-app.get('/api/deposits', authMiddleware, (req, res) => {
-  const rows = all(
+app.get('/api/deposits', authMiddleware, async (req, res) => {
+  const rows = await all(
     `SELECT id, provider, amount, transaction_id, status, created_at
      FROM deposit_requests WHERE user_id = ?
      UNION ALL
@@ -615,7 +667,7 @@ app.get('/api/deposits', authMiddleware, (req, res) => {
   return res.json({ success: true, deposits: rows });
 });
 
-app.post('/api/wallet/withdraw', authMiddleware, (req, res) => {
+app.post('/api/wallet/withdraw', authMiddleware, async (req, res) => {
   const amount = Number(req.body.amount);
   const pin = String(req.body.pin || '');
   const accountProvider = String(req.body.accountProvider || '').trim();
@@ -638,14 +690,14 @@ app.post('/api/wallet/withdraw', authMiddleware, (req, res) => {
     return res.status(400).json({ success: false, message: 'Enter a valid mobile money number, e.g. 0770123456.' });
   }
 
-  const user = get('SELECT * FROM users WHERE id = ?', [req.user.id]);
+  const user = await get('SELECT * FROM users WHERE id = ?', [req.user.id]);
   const validPin = bcrypt.compareSync(pin, user.pin_hash);
   if (!validPin) {
     return res.status(400).json({ success: false, message: 'Incorrect withdrawal PIN.' });
   }
 
-  const wallet = getWallet(req.user.id);
-  const pendingRequests = get(
+  const wallet = await getWallet(req.user.id);
+  const pendingRequests = await get(
     `SELECT COALESCE(SUM(amount), 0) AS amount
      FROM withdrawal_requests WHERE user_id = ? AND status = 'pending'`,
     [req.user.id]
@@ -655,7 +707,7 @@ app.post('/api/wallet/withdraw', authMiddleware, (req, res) => {
     return res.status(400).json({ success: false, message: 'Withdrawal exceeds your available balance.' });
   }
 
-  const lastRequest = get(
+  const lastRequest = await get(
     'SELECT created_at FROM withdrawal_requests WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 1',
     [req.user.id]
   );
@@ -673,12 +725,12 @@ app.post('/api/wallet/withdraw', authMiddleware, (req, res) => {
     }
   }
 
-  const request = run(
+  const request = await run(
     `INSERT INTO withdrawal_requests (user_id, amount, status, account_provider, account_name, account_number)
      VALUES (?, ?, 'pending', ?, ?, ?)`,
     [req.user.id, amount, accountProvider, accountName, accountNumber]
   );
-  const withdrawal = get(
+  const withdrawal = await get(
     'SELECT id, amount, status, account_provider, account_name, account_number, created_at FROM withdrawal_requests WHERE id = ?',
     [request.lastInsertRowid]
   );
@@ -691,24 +743,24 @@ app.post('/api/wallet/withdraw', authMiddleware, (req, res) => {
   });
 });
 
-app.get('/api/withdrawals', authMiddleware, (req, res) => {
-  const rows = all(
+app.get('/api/withdrawals', authMiddleware, async (req, res) => {
+  const rows = await all(
     `SELECT id, amount, status, account_provider, account_name, account_number, created_at FROM withdrawal_requests WHERE user_id = ?
      UNION ALL
      SELECT id, amount, status, NULL AS account_provider, NULL AS account_name, NULL AS account_number, created_at FROM transactions WHERE user_id = ? AND type = 'withdrawal'
      ORDER BY created_at DESC LIMIT 20`,
     [req.user.id, req.user.id]
   );
-  const pending = get(
+  const pending = await get(
     `SELECT COALESCE(SUM(amount), 0) AS amount
      FROM withdrawal_requests WHERE user_id = ? AND status = 'pending'`,
     [req.user.id]
   );
-  const wallet = getWallet(req.user.id);
+  const wallet = await getWallet(req.user.id);
   const pendingWithdrawals = Number(pending.amount) || 0;
 
   let nextWithdrawalAt = null;
-  const lastRequest = get(
+  const lastRequest = await get(
     'SELECT created_at FROM withdrawal_requests WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 1',
     [req.user.id]
   );
@@ -729,9 +781,9 @@ app.get('/api/withdrawals', authMiddleware, (req, res) => {
   });
 });
 
-app.get('/api/team', authMiddleware, (req, res) => {
-  const direct = get('SELECT COUNT(*) AS count FROM users WHERE referred_by = ?', [req.user.id]).count;
-  const level2 = get(
+app.get('/api/team', authMiddleware, async (req, res) => {
+  const direct = await get('SELECT COUNT(*) AS count FROM users WHERE referred_by = ?', [req.user.id]).count;
+  const level2 = await get(
     `SELECT COUNT(*) AS count FROM users AS l2
      JOIN users AS l1 ON l1.id = l2.referred_by
      WHERE l1.referred_by = ?`,
@@ -748,8 +800,8 @@ app.get('/api/team', authMiddleware, (req, res) => {
   });
 });
 
-app.get('/api/rewards/status', authMiddleware, (req, res) => {
-  const claim = get('SELECT bonus, created_at FROM reward_claims WHERE user_id = ?', [req.user.id]);
+app.get('/api/rewards/status', authMiddleware, async (req, res) => {
+  const claim = await get('SELECT bonus, created_at FROM reward_claims WHERE user_id = ?', [req.user.id]);
   return res.json({
     success: true,
     claimed: Boolean(claim),
@@ -769,25 +821,25 @@ app.post('/api/rewards/claim', authMiddleware, (req, res) => {
   });
 });
 
-app.get('/api/toonhub/status', authMiddleware, (req, res) => {
-  const activeLevels = new Set(all(
+app.get('/api/toonhub/status', authMiddleware, async (req, res) => {
+  const activeLevels = new Set(await all(
     "SELECT level FROM toon_subscriptions WHERE user_id = ? AND status = 'active'",
     [req.user.id]
   ).map((row) => Number(row.level)));
-  const pendingLevels = new Set(all(
+  const pendingLevels = new Set(await all(
     "SELECT level FROM toon_subscriptions WHERE user_id = ? AND status = 'payment_required'",
     [req.user.id]
   ).map((row) => Number(row.level)));
   const today = getKampalaDate();
-  const claimedLevels = new Set(all(
+  const claimedLevels = new Set(await all(
     'SELECT level FROM toon_reward_claims WHERE user_id = ? AND claim_date = ?',
     [req.user.id, today]
   ).map((row) => Number(row.level)));
-  const watchedLevels = new Set(all(
+  const watchedLevels = new Set(await all(
     'SELECT level FROM toon_watch_sessions WHERE user_id = ? AND watch_date = ? AND completed_at IS NOT NULL',
     [req.user.id, today]
   ).map((row) => Number(row.level)));
-  const startedLevels = new Set(all(
+  const startedLevels = new Set(await all(
     'SELECT level FROM toon_watch_sessions WHERE user_id = ? AND watch_date = ?',
     [req.user.id, today]
   ).map((row) => Number(row.level)));
@@ -804,28 +856,28 @@ app.get('/api/toonhub/status', authMiddleware, (req, res) => {
   return res.json({ success: true, levels });
 });
 
-app.post('/api/toonhub/watch', authMiddleware, (req, res) => {
+app.post('/api/toonhub/watch', authMiddleware, async (req, res) => {
   const level = Number(req.body.level);
   if (!TOON_LEVELS[level] || !Number.isInteger(level)) {
     return res.status(400).json({ success: false, message: 'Choose a valid Toonhub level.' });
   }
 
-  const watch = db.transaction(() => {
-    const subscription = get(
+  const watch = await db.transaction(async () => {
+    const subscription = await get(
       "SELECT status FROM toon_subscriptions WHERE user_id = ? AND level = ?",
       [req.user.id, level]
     );
     if (subscription?.status !== 'active') return { error: 'This Toonhub level is locked until its payment is approved.' };
 
     const watchDate = getKampalaDate();
-    const priorWatch = get(
+    const priorWatch = await get(
       'SELECT id, completed_at FROM toon_watch_sessions WHERE user_id = ? AND level = ? AND watch_date = ?',
       [req.user.id, level, watchDate]
     );
     if (priorWatch?.completed_at) return { error: 'You have already watched this level today.' };
     if (priorWatch) return { resume: true };
 
-    run(
+    await run(
       'INSERT INTO toon_watch_sessions (user_id, level, watch_date) VALUES (?, ?, ?)',
       [req.user.id, level, watchDate]
     );
@@ -839,14 +891,14 @@ app.post('/api/toonhub/watch', authMiddleware, (req, res) => {
   });
 });
 
-app.post('/api/toonhub/complete', authMiddleware, (req, res) => {
+app.post('/api/toonhub/complete', authMiddleware, async (req, res) => {
   const level = Number(req.body.level);
   if (!TOON_LEVELS[level] || !Number.isInteger(level)) {
     return res.status(400).json({ success: false, message: 'Choose a valid Toonhub level.' });
   }
 
   const watchDate = getKampalaDate();
-  const watch = get(
+  const watch = await get(
     `SELECT id, created_at, completed_at FROM toon_watch_sessions
      WHERE user_id = ? AND level = ? AND watch_date = ?`,
     [req.user.id, level, watchDate]
@@ -864,7 +916,7 @@ app.post('/api/toonhub/complete', authMiddleware, (req, res) => {
       message: `Keep watching for ${TOON_WATCH_SECONDS} seconds before claiming your reward.`
     });
   }
-  const result = run(
+  const result = await run(
     `UPDATE toon_watch_sessions SET completed_at = CURRENT_TIMESTAMP
      WHERE id = ? AND completed_at IS NULL
        AND EXISTS (SELECT 1 FROM toon_subscriptions WHERE user_id = ? AND level = ? AND status = 'active')`,
@@ -876,43 +928,43 @@ app.post('/api/toonhub/complete', authMiddleware, (req, res) => {
   return res.json({ success: true, message: 'Video completed. Today’s reward is ready to claim.' });
 });
 
-app.post('/api/toonhub/subscribe', authMiddleware, (req, res) => {
+app.post('/api/toonhub/subscribe', authMiddleware, async (req, res) => {
   const level = Number(req.body.level);
   const details = TOON_LEVELS[level];
   if (!details || !Number.isInteger(level)) {
     return res.status(400).json({ success: false, message: 'Choose a valid Toonhub level.' });
   }
 
-  const existing = get('SELECT status FROM toon_subscriptions WHERE user_id = ? AND level = ?', [req.user.id, level]);
+  const existing = await get('SELECT status FROM toon_subscriptions WHERE user_id = ? AND level = ?', [req.user.id, level]);
   if (existing?.status === 'active') {
     return res.json({ success: true, status: 'active', message: `VIP ${level} is already active.` });
   }
 
-  const matchedDeposit = get(
+  const matchedDeposit = await get(
     `SELECT id, status FROM deposit_requests
      WHERE user_id = ? AND amount = ? AND status IN ('pending', 'confirmed')
      ORDER BY CASE status WHEN 'confirmed' THEN 0 ELSE 1 END, id DESC LIMIT 1`,
     [req.user.id, details.amount]
   );
   const status = matchedDeposit?.status === 'confirmed' ? 'active' : 'payment_required';
-  const subscription = db.transaction(() => {
+  const subscription = await db.transaction(async () => {
     if (status === 'active' && matchedDeposit) {
-      const alreadyReserved = get(
+      const alreadyReserved = await get(
         `SELECT id FROM transactions
          WHERE user_id = ? AND type = 'toon_subscription' AND amount = ? AND status = 'reserved'
            AND id IN (SELECT id FROM transactions WHERE user_id = ? ORDER BY id DESC) LIMIT 1`,
         [req.user.id, details.amount, req.user.id]
       );
       if (!alreadyReserved) {
-        const wallet = getWallet(req.user.id);
+        const wallet = await getWallet(req.user.id);
         if (Number(wallet.withdrawable) < details.amount) {
           return { error: 'This approved deposit has already been spent or withdrawn and cannot activate this level.' };
         }
-        run(
+        await run(
           'UPDATE wallets SET withdrawable = withdrawable - ?, total = total - ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?',
           [details.amount, details.amount, req.user.id]
         );
-        run(
+        await run(
           'INSERT INTO transactions (user_id, type, amount, status) VALUES (?, ?, ?, ?)',
           [req.user.id, 'toon_subscription', -details.amount, 'reserved']
         );
@@ -921,13 +973,13 @@ app.post('/api/toonhub/subscribe', authMiddleware, (req, res) => {
     // One active level per client: when a new level activates, the previous
     // one is locked until its payment is approved again.
     if (status === 'active') {
-      run(
+      await run(
         `UPDATE toon_subscriptions SET status = 'payment_required', deposit_id = NULL, updated_at = CURRENT_TIMESTAMP
          WHERE user_id = ? AND level != ? AND status = 'active'`,
         [req.user.id, level]
       );
     }
-    run(
+    await run(
       `INSERT INTO toon_subscriptions (user_id, level, amount, status, deposit_id)
        VALUES (?, ?, ?, ?, ?)
        ON CONFLICT(user_id, level) DO UPDATE SET
@@ -950,46 +1002,46 @@ app.post('/api/toonhub/subscribe', authMiddleware, (req, res) => {
   });
 });
 
-app.post('/api/toonhub/claim', authMiddleware, (req, res) => {
+app.post('/api/toonhub/claim', authMiddleware, async (req, res) => {
   const level = Number(req.body.level);
   const details = TOON_LEVELS[level];
   if (!details || !Number.isInteger(level)) {
     return res.status(400).json({ success: false, message: 'Choose a valid Toonhub level.' });
   }
 
-  const claim = db.transaction(() => {
-    const subscription = get(
+  const claim = await db.transaction(async () => {
+    const subscription = await get(
       'SELECT status FROM toon_subscriptions WHERE user_id = ? AND level = ?',
       [req.user.id, level]
     );
     if (subscription?.status !== 'active') return { error: 'This Toonhub level is locked until its payment is approved.' };
 
     const claimDate = getKampalaDate();
-    const watched = get(
+    const watched = await get(
       'SELECT id FROM toon_watch_sessions WHERE user_id = ? AND level = ? AND watch_date = ? AND completed_at IS NOT NULL',
       [req.user.id, level, claimDate]
     );
     if (!watched) return { error: 'Watch today’s video before claiming this level’s reward.' };
 
-    const alreadyClaimed = get(
+    const alreadyClaimed = await get(
       'SELECT id FROM toon_reward_claims WHERE user_id = ? AND level = ? AND claim_date = ?',
       [req.user.id, level, claimDate]
     );
     if (alreadyClaimed) return { error: 'You have already claimed today’s reward for this level.' };
 
-    run(
+    await run(
       'INSERT INTO toon_reward_claims (user_id, level, claim_date, amount) VALUES (?, ?, ?, ?)',
       [req.user.id, level, claimDate, details.reward]
     );
-    run(
+    await run(
       'UPDATE wallets SET withdrawable = withdrawable + ?, total = total + ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?',
       [details.reward, details.reward, req.user.id]
     );
-    run(
+    await run(
       'INSERT INTO transactions (user_id, type, amount, status) VALUES (?, ?, ?, ?)',
       [req.user.id, 'toonhub_reward', details.reward, 'credited']
     );
-    return { amount: details.reward, wallet: getWallet(req.user.id) };
+    return { amount: details.reward, wallet: await getWallet(req.user.id) };
   })();
 
   if (claim.error) return res.status(409).json({ success: false, message: claim.error });
@@ -1001,8 +1053,8 @@ app.post('/api/toonhub/claim', authMiddleware, (req, res) => {
   });
 });
 
-app.get('/api/admin/deposits', adminMiddleware, (req, res) => {
-  const rows = all(
+app.get('/api/admin/deposits', adminMiddleware, async (req, res) => {
+  const rows = await all(
     `SELECT d.id, d.user_id, d.provider, d.amount, d.transaction_id, d.status, d.created_at,
             u.username
      FROM deposit_requests d JOIN users u ON u.id = d.user_id
@@ -1013,18 +1065,18 @@ app.get('/api/admin/deposits', adminMiddleware, (req, res) => {
 
 // Core settlement used by the admin queue and the SMS auto-credit engine.
 // 'confirmed' credits the wallet atomically; 'rejected' only flips the status.
-const settleDepositById = (id, nextStatus) => {
-  return db.transaction(() => {
-    const deposit = get('SELECT id, user_id, provider, amount, status, transaction_id, payer_number FROM deposit_requests WHERE id = ?', [id]);
+const settleDepositById = async (id, nextStatus) => {
+  return await db.transaction(async () => {
+    const deposit = await get('SELECT id, user_id, provider, amount, status, transaction_id, payer_number FROM deposit_requests WHERE id = ?', [id]);
     if (!deposit) return { error: 404, message: 'Deposit request not found.' };
     if (deposit.status !== 'pending') return { error: 409, message: `This deposit was already ${deposit.status}.` };
 
-    run('UPDATE deposit_requests SET status = ? WHERE id = ?', [nextStatus, id]);
+    await run('UPDATE deposit_requests SET status = ? WHERE id = ?', [nextStatus, id]);
 
     let activatedLevel = null;
     if (nextStatus === 'confirmed') {
-      createWalletIfMissing(deposit.user_id);
-      const subscriptionDeposit = get(
+      await createWalletIfMissing(deposit.user_id);
+      const subscriptionDeposit = await get(
         `SELECT level, status FROM toon_subscriptions
          WHERE user_id = ? AND deposit_id = ? AND status IN ('payment_required', 'active')`,
         [deposit.user_id, id]
@@ -1033,30 +1085,30 @@ const settleDepositById = (id, nextStatus) => {
         // Subscription payments are NOT wallet credit: approving them activates
         // the level, and the money is recorded as reserved, never withdrawable.
         activatedLevel = subscriptionDeposit.level;
-        run(
+        await run(
           'INSERT INTO transactions (user_id, type, amount, status) VALUES (?, ?, ?, ?)',
           [deposit.user_id, 'toon_subscription', -deposit.amount, 'reserved']
         );
       }
       if (!subscriptionDeposit) {
-        run(
+        await run(
           'UPDATE wallets SET withdrawable = withdrawable + ?, total = total + ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?',
           [deposit.amount, deposit.amount, deposit.user_id]
         );
-        run(
+        await run(
           'INSERT INTO transactions (user_id, type, amount, status) VALUES (?, ?, ?, ?)',
           [deposit.user_id, 'deposit', deposit.amount, 'confirmed']
         );
       }
       if (activatedLevel) {
         // One active level per client: the newly approved level locks the rest.
-        run(
+        await run(
           `UPDATE toon_subscriptions SET status = 'payment_required', deposit_id = NULL, updated_at = CURRENT_TIMESTAMP
            WHERE user_id = ? AND level != ? AND status = 'active'`,
           [deposit.user_id, activatedLevel]
         );
       }
-      run(
+      await run(
         `UPDATE toon_subscriptions SET status = 'active', updated_at = CURRENT_TIMESTAMP
          WHERE deposit_id = ? AND user_id = ? AND amount = ?`,
         [id, deposit.user_id, deposit.amount]
@@ -1066,12 +1118,12 @@ const settleDepositById = (id, nextStatus) => {
   })();
 };
 
-app.post('/api/admin/deposits/:id/approve', adminMiddleware, (req, res) => {
-  const result = settleDepositById(Number(req.params.id), 'confirmed');
+app.post('/api/admin/deposits/:id/approve', adminMiddleware, async (req, res) => {
+  const result = await settleDepositById(Number(req.params.id), 'confirmed');
   if (result.error) {
     return res.status(result.error).json({ success: false, message: result.message });
   }
-  const username = get('SELECT username FROM users WHERE id = ?', [result.deposit.user_id])?.username || 'unknown';
+  const username = await get('SELECT username FROM users WHERE id = ?', [result.deposit.user_id])?.username || 'unknown';
   const approvalMessage = result.activatedLevel
     ? `Deposit #${result.deposit.id} confirmed. UGX ${Number(result.deposit.amount).toLocaleString()} VIP ${result.activatedLevel} subscription activated for @${username} (reserved, not withdrawable).`
     : `Deposit #${result.deposit.id} confirmed. UGX ${Number(result.deposit.amount).toLocaleString()} credited to @${username}.`;
@@ -1082,8 +1134,8 @@ app.post('/api/admin/deposits/:id/approve', adminMiddleware, (req, res) => {
   });
 });
 
-app.post('/api/admin/deposits/:id/reject', adminMiddleware, (req, res) => {
-  const result = settleDepositById(Number(req.params.id), 'rejected');
+app.post('/api/admin/deposits/:id/reject', adminMiddleware, async (req, res) => {
+  const result = await settleDepositById(Number(req.params.id), 'rejected');
   if (result.error) {
     return res.status(result.error).json({ success: false, message: result.message });
   }
@@ -1095,17 +1147,17 @@ app.post('/api/admin/deposits/:id/reject', adminMiddleware, (req, res) => {
 });
 
 // --- Admin dashboard data & withdrawal payouts ------------------------------
-app.get('/api/admin/stats', adminMiddleware, (req, res) => {
-  const pendingDeposits = get(`SELECT COUNT(*) AS count, COALESCE(SUM(amount), 0) AS amount FROM deposit_requests WHERE status = 'pending'`);
-  const pendingWithdrawals = get(`SELECT COUNT(*) AS count, COALESCE(SUM(amount), 0) AS amount FROM withdrawal_requests WHERE status = 'pending'`);
-  const users = get('SELECT COUNT(*) AS count FROM users');
-  const confirmedDeposits = get(`SELECT COALESCE(SUM(amount), 0) AS amount FROM deposit_requests WHERE status = 'confirmed'`);
-  const paidWithdrawals = get(`SELECT COALESCE(SUM(amount), 0) AS amount FROM withdrawal_requests WHERE status = 'paid'`);
-  const fortune = get(
+app.get('/api/admin/stats', adminMiddleware, async (req, res) => {
+  const pendingDeposits = await get(`SELECT COUNT(*) AS count, COALESCE(SUM(amount), 0) AS amount FROM deposit_requests WHERE status = 'pending'`);
+  const pendingWithdrawals = await get(`SELECT COUNT(*) AS count, COALESCE(SUM(amount), 0) AS amount FROM withdrawal_requests WHERE status = 'pending'`);
+  const users = await get('SELECT COUNT(*) AS count FROM users');
+  const confirmedDeposits = await get(`SELECT COALESCE(SUM(amount), 0) AS amount FROM deposit_requests WHERE status = 'confirmed'`);
+  const paidWithdrawals = await get(`SELECT COALESCE(SUM(amount), 0) AS amount FROM withdrawal_requests WHERE status = 'paid'`);
+  const fortune = await get(
     `SELECT COUNT(DISTINCT f.id) AS issued, COALESCE(SUM(f.amount), 0) AS redeemed
      FROM fortune_codes f LEFT JOIN fortune_redemptions r ON r.fortune_code_id = f.id`
   );
-  const unmatchedSms = get(`SELECT COUNT(*) AS count FROM sms_log WHERE action = 'no_match'`);
+  const unmatchedSms = await get(`SELECT COUNT(*) AS count FROM sms_log WHERE action = 'no_match'`);
 
   return res.json({
     success: true,
@@ -1121,8 +1173,8 @@ app.get('/api/admin/stats', adminMiddleware, (req, res) => {
   });
 });
 
-app.get('/api/admin/users', adminMiddleware, (req, res) => {
-  const rows = all(
+app.get('/api/admin/users', adminMiddleware, async (req, res) => {
+  const rows = await all(
     `SELECT u.id, u.username, u.role, u.full_name, u.email, u.mobile, u.invite_code, u.referred_by, u.created_at,
             w.withdrawable, w.total, w.pending
      FROM users u LEFT JOIN wallets w ON w.user_id = u.id
@@ -1136,7 +1188,7 @@ app.get('/api/admin/users', adminMiddleware, (req, res) => {
 // written to the transactions ledger so both sides keep an audit trail.
 const MAX_BALANCE_ADJUSTMENT = 100000000;
 
-app.post('/api/admin/users/:id/balance', adminMiddleware, (req, res) => {
+app.post('/api/admin/users/:id/balance', adminMiddleware, async (req, res) => {
   const userId = Number(req.params.id);
   const amount = Number(req.body.amount);
   if (!Number.isInteger(userId) || userId <= 0) {
@@ -1149,7 +1201,7 @@ app.post('/api/admin/users/:id/balance', adminMiddleware, (req, res) => {
     return res.status(400).json({ success: false, message: 'That adjustment is too large.' });
   }
 
-  const target = get('SELECT id, username, role FROM users WHERE id = ?', [userId]);
+  const target = await get('SELECT id, username, role FROM users WHERE id = ?', [userId]);
   if (!target) {
     return res.status(404).json({ success: false, message: 'User not found.' });
   }
@@ -1157,21 +1209,21 @@ app.post('/api/admin/users/:id/balance', adminMiddleware, (req, res) => {
     return res.status(409).json({ success: false, message: 'Admin accounts do not hold a client wallet.' });
   }
 
-  createWalletIfMissing(userId);
-  const adjustment = db.transaction(() => {
-    const wallet = getWallet(userId);
+  await createWalletIfMissing(userId);
+  const adjustment = await db.transaction(async () => {
+    const wallet = await getWallet(userId);
     if (Number(wallet.withdrawable) + amount < 0) {
       return { error: `@${target.username} only has UGX ${Number(wallet.withdrawable).toLocaleString()} available, so the debit was cancelled.` };
     }
-    run(
+    await run(
       'UPDATE wallets SET withdrawable = withdrawable + ?, total = total + ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?',
       [amount, amount, userId]
     );
-    run(
+    await run(
       'INSERT INTO transactions (user_id, type, amount, status) VALUES (?, ?, ?, ?)',
       [userId, 'admin_adjustment', amount, 'adjusted']
     );
-    return { wallet: getWallet(userId) };
+    return { wallet: await getWallet(userId) };
   })();
 
   if (adjustment.error) {
@@ -1185,12 +1237,12 @@ app.post('/api/admin/users/:id/balance', adminMiddleware, (req, res) => {
 });
 
 // Removes a client and every record tied to them. Admin accounts are protected.
-app.delete('/api/admin/users/:id', adminMiddleware, (req, res) => {
+app.delete('/api/admin/users/:id', adminMiddleware, async (req, res) => {
   const userId = Number(req.params.id);
   if (!Number.isInteger(userId) || userId <= 0) {
     return res.status(400).json({ success: false, message: 'Invalid user.' });
   }
-  const target = get('SELECT id, username, role FROM users WHERE id = ?', [userId]);
+  const target = await get('SELECT id, username, role FROM users WHERE id = ?', [userId]);
   if (!target) {
     return res.status(404).json({ success: false, message: 'User not found.' });
   }
@@ -1198,26 +1250,26 @@ app.delete('/api/admin/users/:id', adminMiddleware, (req, res) => {
     return res.status(409).json({ success: false, message: 'The admin account cannot be deleted.' });
   }
 
-  db.transaction(() => {
-    run('UPDATE fortune_codes SET redeemed_by = NULL WHERE redeemed_by = ?', [userId]);
-    run('DELETE FROM fortune_redemptions WHERE user_id = ?', [userId]);
-    run('DELETE FROM toon_reward_claims WHERE user_id = ?', [userId]);
-    run('DELETE FROM toon_watch_sessions WHERE user_id = ?', [userId]);
-    run('DELETE FROM toon_subscriptions WHERE user_id = ?', [userId]);
-    run('DELETE FROM plan_selections WHERE user_id = ?', [userId]);
-    run('DELETE FROM reward_claims WHERE user_id = ?', [userId]);
-    run('DELETE FROM deposit_requests WHERE user_id = ?', [userId]);
-    run('DELETE FROM withdrawal_requests WHERE user_id = ?', [userId]);
-    run('DELETE FROM transactions WHERE user_id = ?', [userId]);
-    run('DELETE FROM wallets WHERE user_id = ?', [userId]);
-    run("DELETE FROM users WHERE id = ? AND role != 'admin'", [userId]);
+  await db.transaction(async () => {
+    await run('UPDATE fortune_codes SET redeemed_by = NULL WHERE redeemed_by = ?', [userId]);
+    await run('DELETE FROM fortune_redemptions WHERE user_id = ?', [userId]);
+    await run('DELETE FROM toon_reward_claims WHERE user_id = ?', [userId]);
+    await run('DELETE FROM toon_watch_sessions WHERE user_id = ?', [userId]);
+    await run('DELETE FROM toon_subscriptions WHERE user_id = ?', [userId]);
+    await run('DELETE FROM plan_selections WHERE user_id = ?', [userId]);
+    await run('DELETE FROM reward_claims WHERE user_id = ?', [userId]);
+    await run('DELETE FROM deposit_requests WHERE user_id = ?', [userId]);
+    await run('DELETE FROM withdrawal_requests WHERE user_id = ?', [userId]);
+    await run('DELETE FROM transactions WHERE user_id = ?', [userId]);
+    await run('DELETE FROM wallets WHERE user_id = ?', [userId]);
+    await run("DELETE FROM users WHERE id = ? AND role != 'admin'", [userId]);
   })();
 
   return res.json({ success: true, message: `@${target.username} and all their data were removed from the system.` });
 });
 
-app.get('/api/admin/withdrawals', adminMiddleware, (req, res) => {
-  const rows = all(
+app.get('/api/admin/withdrawals', adminMiddleware, async (req, res) => {
+  const rows = await all(
     `SELECT r.id, r.user_id, r.amount, r.status, r.account_provider, r.account_name, r.account_number, r.created_at,
             u.username
      FROM withdrawal_requests r JOIN users u ON u.id = r.user_id
@@ -1230,9 +1282,9 @@ app.get('/api/admin/withdrawals', adminMiddleware, (req, res) => {
 // account to the customer: wallet is debited and the request is closed 'paid'.
 // Reject = the request cannot be honored: the reservation releases, no balances
 // move (they were never debited).
-const settleWithdrawalById = (id, nextStatus) => {
-  return db.transaction(() => {
-    const withdrawal = get(
+const settleWithdrawalById = async (id, nextStatus) => {
+  return await db.transaction(async () => {
+    const withdrawal = await get(
       'SELECT id, user_id, amount, status, account_provider, account_number FROM withdrawal_requests WHERE id = ?',
       [id]
     );
@@ -1240,24 +1292,24 @@ const settleWithdrawalById = (id, nextStatus) => {
     if (withdrawal.status !== 'pending') return { error: 409, message: `This withdrawal was already ${withdrawal.status}.` };
 
     if (nextStatus === 'paid') {
-      const update = run(
+      const update = await run(
         'UPDATE wallets SET withdrawable = withdrawable - ?, total = total - ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND withdrawable >= ?',
         [withdrawal.amount, withdrawal.amount, withdrawal.user_id, withdrawal.amount]
       );
       if (update.changes !== 1) return { error: 409, message: 'The wallet no longer holds enough funds for this payout.' };
-      run(
+      await run(
         'INSERT INTO transactions (user_id, type, amount, status) VALUES (?, ?, ?, ?)',
         [withdrawal.user_id, 'withdrawal', withdrawal.amount, 'completed']
       );
     }
 
-    run('UPDATE withdrawal_requests SET status = ? WHERE id = ?', [nextStatus, id]);
+    await run('UPDATE withdrawal_requests SET status = ? WHERE id = ?', [nextStatus, id]);
     return { withdrawal };
   })();
 };
 
-app.post('/api/admin/withdrawals/:id/approve', adminMiddleware, (req, res) => {
-  const result = settleWithdrawalById(Number(req.params.id), 'paid');
+app.post('/api/admin/withdrawals/:id/approve', adminMiddleware, async (req, res) => {
+  const result = await settleWithdrawalById(Number(req.params.id), 'paid');
   if (result.error) {
     return res.status(result.error).json({ success: false, message: result.message });
   }
@@ -1268,8 +1320,8 @@ app.post('/api/admin/withdrawals/:id/approve', adminMiddleware, (req, res) => {
   });
 });
 
-app.post('/api/admin/withdrawals/:id/reject', adminMiddleware, (req, res) => {
-  const result = settleWithdrawalById(Number(req.params.id), 'rejected');
+app.post('/api/admin/withdrawals/:id/reject', adminMiddleware, async (req, res) => {
+  const result = await settleWithdrawalById(Number(req.params.id), 'rejected');
   if (result.error) {
     return res.status(result.error).json({ success: false, message: result.message });
   }
@@ -1280,13 +1332,13 @@ app.post('/api/admin/withdrawals/:id/reject', adminMiddleware, (req, res) => {
   });
 });
 
-app.get('/api/admin/sms', adminMiddleware, (req, res) => {
-  const rows = all('SELECT id, sender, body, parsed_amount, parsed_payer, parsed_reference, action, created_at FROM sms_log ORDER BY id DESC LIMIT 50');
+app.get('/api/admin/sms', adminMiddleware, async (req, res) => {
+  const rows = await all('SELECT id, sender, body, parsed_amount, parsed_payer, parsed_reference, action, created_at FROM sms_log ORDER BY id DESC LIMIT 50');
   return res.json({ success: true, messages: rows });
 });
 
-app.get('/api/admin/fortune-codes', adminMiddleware, (req, res) => {
-  const rows = all(
+app.get('/api/admin/fortune-codes', adminMiddleware, async (req, res) => {
+  const rows = await all(
     `SELECT f.code, f.amount, f.max_redemptions, f.redeemed_at, f.created_at,
             u.username AS redeemed_by,
             (SELECT COUNT(*) FROM fortune_redemptions r WHERE r.fortune_code_id = f.id) AS redeemed_count
@@ -1350,9 +1402,9 @@ const parsePaymentSms = (sender, body) => {
   return { network: isMtn ? 'MTN Mobile Money' : 'Airtel Money', amount, payer, reference };
 };
 
-const autoCreditFromSms = (parsed) => {
-  return db.transaction(() => {
-    const candidates = all(
+const autoCreditFromSms = async (parsed) => {
+  return await db.transaction(async () => {
+    const candidates = await all(
       `SELECT id, user_id, amount FROM deposit_requests
        WHERE status = 'pending' AND provider = ? AND amount = ?
        ORDER BY id ASC LIMIT 25`,
@@ -1360,13 +1412,13 @@ const autoCreditFromSms = (parsed) => {
     );
     let match = null;
     if (parsed.payer) {
-      match = candidates.find((row) => {
-        const stored = normalizePayerNumber(get('SELECT payer_number FROM deposit_requests WHERE id = ?', [row.id])?.payer_number);
-        return stored && stored === parsed.payer;
-      }) || null;
+      for (const row of candidates) {
+        const stored = normalizePayerNumber((await get('SELECT payer_number FROM deposit_requests WHERE id = ?', [row.id]))?.payer_number);
+        if (stored && stored === parsed.payer) { match = row; break; }
+      }
     }
     if (!match && parsed.reference) {
-      match = get(
+      match = await get(
         `SELECT id, user_id, amount FROM deposit_requests
          WHERE status = 'pending' AND provider = ? AND LOWER(transaction_id) = LOWER(?)
          ORDER BY id ASC LIMIT 1`,
@@ -1375,7 +1427,7 @@ const autoCreditFromSms = (parsed) => {
     }
     if (!match) return null;
 
-    const result = settleDepositById(match.id, 'confirmed');
+    const result = await settleDepositById(match.id, 'confirmed');
     return result.error ? null : { depositId: match.id, userId: match.user_id, amount: match.amount };
   })();
 };
@@ -1383,7 +1435,7 @@ const autoCreditFromSms = (parsed) => {
 // Receives one SMS (or an array) from an auto-forwarder app or the admin panel.
 // Auth: X-Admin-Key (same ADMIN_KEY as other admin endpoints). Always 200 so
 // forwarders do not retry endlessly; every message is logged in sms_log.
-app.post('/api/sms/ingest', (req, res) => {
+app.post('/api/sms/ingest', async (req, res) => {
   const providedKey = Buffer.from(String(req.get('X-Admin-Key') || ''));
   const configuredKey = Buffer.from(ADMIN_KEY);
   if (!ADMIN_KEY || providedKey.length !== configuredKey.length || !timingSafeEqual(providedKey, configuredKey)) {
@@ -1403,11 +1455,11 @@ app.post('/api/sms/ingest', (req, res) => {
     let credited = null;
 
     if (parsed) {
-      credited = autoCreditFromSms(parsed);
+      credited = await autoCreditFromSms(parsed);
       action = credited ? 'credited' : 'no_match';
     }
 
-    run(
+    await run(
       'INSERT INTO sms_log (sender, body, parsed_amount, parsed_payer, parsed_reference, action) VALUES (?, ?, ?, ?, ?, ?)',
       [sender, body, parsed ? parsed.amount : null, parsed ? parsed.payer : null, parsed ? parsed.reference : null, action]
     );
@@ -1417,7 +1469,7 @@ app.post('/api/sms/ingest', (req, res) => {
   return res.json({ success: true, results });
 });
 
-app.post('/api/admin/fortune-codes', adminMiddleware, (req, res) => {
+app.post('/api/admin/fortune-codes', adminMiddleware, async (req, res) => {
   const suppliedCode = req.body.code === undefined ? null : normalizeFortuneCode(req.body.code);
   const amount = normalizeFortuneAmount(req.body.amount);
 
@@ -1428,9 +1480,9 @@ app.post('/api/admin/fortune-codes', adminMiddleware, (req, res) => {
     return res.status(400).json({ success: false, message: 'Enter a valid fortune amount.' });
   }
 
-  const code = suppliedCode || generateFortuneCode();
+  const code = suppliedCode || await generateFortuneCode();
   try {
-    run('INSERT INTO fortune_codes (code, amount, max_redemptions) VALUES (?, ?, 10)', [code, amount]);
+    await run('INSERT INTO fortune_codes (code, amount, max_redemptions) VALUES (?, ?, 10)', [code, amount]);
   } catch (error) {
     if (String(error.message).includes('UNIQUE constraint failed')) {
       return res.status(409).json({ success: false, message: 'That fortune code has already been issued.' });
@@ -1441,8 +1493,8 @@ app.post('/api/admin/fortune-codes', adminMiddleware, (req, res) => {
   return res.status(201).json({ success: true, code, amount });
 });
 
-app.get('/api/fortune', authMiddleware, (req, res) => {
-  const wins = all(
+app.get('/api/fortune', authMiddleware, async (req, res) => {
+  const wins = await all(
     `SELECT f.code, f.amount, r.redeemed_at AS redeemedAt
      FROM fortune_redemptions r JOIN fortune_codes f ON f.id = r.fortune_code_id
      WHERE r.user_id = ? ORDER BY r.redeemed_at DESC LIMIT 50`,
@@ -1452,57 +1504,57 @@ app.get('/api/fortune', authMiddleware, (req, res) => {
   return res.json({ success: true, totalWon, wins });
 });
 
-app.post('/api/fortune/redeem', authMiddleware, (req, res) => {
+app.post('/api/fortune/redeem', authMiddleware, async (req, res) => {
   const code = normalizeFortuneCode(req.body.code);
   if (!code) {
     return res.status(400).json({ success: false, message: 'Use a code in the FORT-XXXXXX format.' });
   }
 
-  const redemption = db.transaction(() => {
-    const fortuneCode = get(
+  const redemption = await db.transaction(async () => {
+    const fortuneCode = await get(
       'SELECT id, code, amount, max_redemptions FROM fortune_codes WHERE code = ? COLLATE NOCASE',
       [code]
     );
     if (!fortuneCode) return { error: 'Invalid fortune code.' };
 
-    const priorClaim = get(
+    const priorClaim = await get(
       'SELECT id FROM fortune_redemptions WHERE fortune_code_id = ? AND user_id = ?',
       [fortuneCode.id, req.user.id]
     );
     if (priorClaim) return { error: 'You have already redeemed this fortune code.' };
 
-    const claimedCount = get(
+    const claimedCount = await get(
       'SELECT COUNT(*) AS count FROM fortune_redemptions WHERE fortune_code_id = ?',
       [fortuneCode.id]
     ).count;
     if (claimedCount >= fortuneCode.max_redemptions) return { error: 'This fortune code has already been claimed by 10 clients.' };
 
-    run(
+    await run(
       'INSERT INTO fortune_redemptions (fortune_code_id, user_id) VALUES (?, ?)',
       [fortuneCode.id, req.user.id]
     );
-    run(
+    await run(
       'UPDATE fortune_codes SET redeemed_by = COALESCE(redeemed_by, ?), redeemed_at = COALESCE(redeemed_at, CURRENT_TIMESTAMP) WHERE id = ?',
       [req.user.id, fortuneCode.id]
     );
 
-    run(
+    await run(
       'UPDATE wallets SET withdrawable = withdrawable + ?, total = total + ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?',
       [fortuneCode.amount, fortuneCode.amount, req.user.id]
     );
-    run(
+    await run(
       'INSERT INTO transactions (user_id, type, amount, status) VALUES (?, ?, ?, ?)',
       [req.user.id, 'fortune', fortuneCode.amount, 'credited']
     );
 
-    const wallet = get('SELECT withdrawable, total FROM wallets WHERE user_id = ?', [req.user.id]);
-    const totalWon = get(
+    const wallet = await get('SELECT withdrawable, total FROM wallets WHERE user_id = ?', [req.user.id]);
+    const totalWon = await get(
       `SELECT COALESCE(SUM(f.amount), 0) AS amount
        FROM fortune_redemptions r JOIN fortune_codes f ON f.id = r.fortune_code_id
        WHERE r.user_id = ?`,
       [req.user.id]
     );
-    const redeemedAt = get(
+    const redeemedAt = await get(
       'SELECT redeemed_at AS redeemedAt FROM fortune_redemptions WHERE fortune_code_id = ? AND user_id = ?',
       [fortuneCode.id, req.user.id]
     );
@@ -1529,19 +1581,19 @@ app.post('/api/fortune/redeem', authMiddleware, (req, res) => {
   });
 });
 
-app.get('/api/plans/current', authMiddleware, (req, res) => {
-  const selection = get('SELECT plan, status, updated_at FROM plan_selections WHERE user_id = ?', [req.user.id]);
+app.get('/api/plans/current', authMiddleware, async (req, res) => {
+  const selection = await get('SELECT plan, status, updated_at FROM plan_selections WHERE user_id = ?', [req.user.id]);
   return res.json({ success: true, selection: selection || { plan: 'basic', status: 'active', updated_at: null } });
 });
 
-app.post('/api/plans/select', authMiddleware, (req, res) => {
+app.post('/api/plans/select', authMiddleware, async (req, res) => {
   const plan = String(req.body.plan || '').trim().toLowerCase();
   if (!['basic', 'premium', 'vip'].includes(plan)) {
     return res.status(400).json({ success: false, message: 'Choose a valid plan.' });
   }
 
   const status = plan === 'basic' ? 'active' : 'payment_required';
-  run(
+  await run(
     `INSERT INTO plan_selections (user_id, plan, status) VALUES (?, ?, ?)
      ON CONFLICT(user_id) DO UPDATE SET plan = excluded.plan, status = excluded.status, updated_at = CURRENT_TIMESTAMP`,
     [req.user.id, plan, status]
@@ -1553,8 +1605,8 @@ app.post('/api/plans/select', authMiddleware, (req, res) => {
   return res.json({ success: true, message, selection: { plan, status } });
 });
 
-app.get('/api/transactions', authMiddleware, (req, res) => {
-  const rows = all('SELECT * FROM transactions WHERE user_id = ? ORDER BY id DESC LIMIT 20', [req.user.id]);
+app.get('/api/transactions', authMiddleware, async (req, res) => {
+  const rows = await all('SELECT * FROM transactions WHERE user_id = ? ORDER BY id DESC LIMIT 20', [req.user.id]);
   return res.json({ success: true, transactions: rows });
 });
 

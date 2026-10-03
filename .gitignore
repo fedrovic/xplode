@@ -9,3 +9,8 @@ node_modules/
 .freebuff/
 server.log
 *.log
+.vercel
+.env*
+.agents/
+skills-lock.json
+.tmp-*.mjs
