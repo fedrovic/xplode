@@ -102,11 +102,13 @@ const authLimiter = rateLimit({
 
 app.use('/api', apiLimiter);
 
-const remoteDatabaseEnabled = Boolean(process.env.TURSO_DATABASE_URL && process.env.TURSO_AUTH_TOKEN);
+const TURSO_DATABASE_URL = process.env.RECOVERY_TURSO_DATABASE_URL || process.env.TURSO_DATABASE_URL;
+const TURSO_AUTH_TOKEN = process.env.RECOVERY_TURSO_AUTH_TOKEN || process.env.TURSO_AUTH_TOKEN;
+const remoteDatabaseEnabled = Boolean(TURSO_DATABASE_URL && TURSO_AUTH_TOKEN);
 const localDb = remoteDatabaseEnabled ? null : new Database(process.env.DB_PATH || path.join(__dirname, 'xplode.db'));
 localDb?.pragma('journal_mode = WAL');
 localDb?.pragma('foreign_keys = ON');
-const remoteDb = remoteDatabaseEnabled ? connect({ url: process.env.TURSO_DATABASE_URL, authToken: process.env.TURSO_AUTH_TOKEN }) : null;
+const remoteDb = remoteDatabaseEnabled ? connect({ url: TURSO_DATABASE_URL, authToken: TURSO_AUTH_TOKEN }) : null;
 const transactionContext = new AsyncLocalStorage();
 if (remoteDatabaseEnabled) await (await remoteDb.prepare('PRAGMA foreign_keys = ON')).run();
 let localQueue = Promise.resolve();
