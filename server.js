@@ -38,8 +38,11 @@ if (!JWT_SECRET) {
 
 const DEV_JWT_SECRET = 'xplode-dev-secret';
 const WITHDRAWAL_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+const MIN_WITHDRAWAL_AMOUNT = 5000;
+const WITHDRAWAL_FEE_RATE = 0.10;
+const ADMIN_FEE_ACCOUNT = '0704141950';
 const MAX_JSON_BODY = '16kb';
-const DATABASE_SCHEMA_VERSION = 1;
+const DATABASE_SCHEMA_VERSION = 2;
 const TOON_WATCH_SECONDS = 6;
 const getKampalaDate = () => {
   const parts = new Intl.DateTimeFormat('en', {
@@ -219,7 +222,9 @@ const createTables = async () => {
     CREATE TABLE IF NOT EXISTS withdrawal_requests (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
-      amount INTEGER NOT NULL CHECK (amount >= 500),
+      amount INTEGER NOT NULL CHECK (amount >= 5000),
+      fee INTEGER NOT NULL DEFAULT 0,
+      payout_amount INTEGER NOT NULL DEFAULT 0,
       status TEXT NOT NULL DEFAULT 'pending',
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id)
@@ -325,6 +330,19 @@ const createTables = async () => {
   await tryAddColumn('withdrawal_requests', 'account_name', 'TEXT');
   await tryAddColumn('withdrawal_requests', 'account_number', 'TEXT');
   await tryAddColumn('deposit_requests', 'payer_number', 'TEXT');
+  await tryAddColumn('withdrawal_requests', 'fee', 'INTEGER NOT NULL DEFAULT 0');
+  await tryAddColumn('withdrawal_requests', 'payout_amount', 'INTEGER NOT NULL DEFAULT 0');
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS admin_fee_ledger (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      withdrawal_id INTEGER NOT NULL UNIQUE,
+      amount INTEGER NOT NULL CHECK (amount > 0),
+      destination TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (withdrawal_id) REFERENCES withdrawal_requests(id)
+    )
+  `);
 
   await run(`
     CREATE TABLE IF NOT EXISTS sms_log (
@@ -692,7 +710,14 @@ app.post('/api/wallet/deposit', authMiddleware, async (req, res) => {
 app.get('/api/deposits', authMiddleware, async (req, res) => {
   const rows = await all(
     `SELECT id, provider, amount, transaction_id, status, created_at
-     FROM deposit_requests WHERE user_id = ?
+     FROM deposit_requests
+     WHERE user_id = ?
+       AND NOT EXISTS (
+         SELECT 1 FROM toon_subscriptions
+         WHERE toon_subscriptions.user_id = deposit_requests.user_id
+           AND toon_subscriptions.deposit_id = deposit_requests.id
+           AND deposit_requests.status = 'confirmed'
+       )
      UNION ALL
      SELECT id, 'Mobile Money' AS provider, amount, NULL AS transaction_id, status, created_at
      FROM transactions WHERE user_id = ? AND type = 'deposit'
@@ -709,8 +734,8 @@ app.post('/api/wallet/withdraw', authMiddleware, async (req, res) => {
   const accountName = String(req.body.accountName || '').trim();
   const accountNumber = String(req.body.accountNumber || '').trim();
 
-  if (!Number.isSafeInteger(amount) || amount < 500) {
-    return res.status(400).json({ success: false, message: 'Minimum withdrawal is UGX 500.' });
+  if (!Number.isSafeInteger(amount) || amount < MIN_WITHDRAWAL_AMOUNT) {
+    return res.status(400).json({ success: false, message: `Minimum withdrawal is UGX ${MIN_WITHDRAWAL_AMOUNT.toLocaleString()}.` });
   }
 
   if (!['MTN Mobile Money', 'Airtel Money'].includes(accountProvider)) {
@@ -742,6 +767,9 @@ app.post('/api/wallet/withdraw', authMiddleware, async (req, res) => {
     return res.status(400).json({ success: false, message: 'Withdrawal exceeds your available balance.' });
   }
 
+  const fee = Math.ceil(amount * WITHDRAWAL_FEE_RATE);
+  const payoutAmount = amount - fee;
+
   const lastRequest = await get(
     'SELECT created_at FROM withdrawal_requests WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 1',
     [req.user.id]
@@ -761,18 +789,18 @@ app.post('/api/wallet/withdraw', authMiddleware, async (req, res) => {
   }
 
   const request = await run(
-    `INSERT INTO withdrawal_requests (user_id, amount, status, account_provider, account_name, account_number)
-     VALUES (?, ?, 'pending', ?, ?, ?)`,
-    [req.user.id, amount, accountProvider, accountName, accountNumber]
+    `INSERT INTO withdrawal_requests (user_id, amount, fee, payout_amount, status, account_provider, account_name, account_number)
+     VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)`,
+    [req.user.id, amount, fee, payoutAmount, accountProvider, accountName, accountNumber]
   );
   const withdrawal = await get(
-    'SELECT id, amount, status, account_provider, account_name, account_number, created_at FROM withdrawal_requests WHERE id = ?',
+    'SELECT id, amount, fee, payout_amount, status, account_provider, account_name, account_number, created_at FROM withdrawal_requests WHERE id = ?',
     [request.lastInsertRowid]
   );
 
   return res.status(201).json({
     success: true,
-    message: 'Withdrawal request submitted for review. Your balance will update after it is processed.',
+    message: `Withdrawal submitted. UGX ${payoutAmount.toLocaleString()} will be sent after approval; UGX ${fee.toLocaleString()} is the 10% service fee.`,
     withdrawal,
     available: available - amount
   });
@@ -781,9 +809,9 @@ app.post('/api/wallet/withdraw', authMiddleware, async (req, res) => {
 app.get('/api/withdrawals', authMiddleware, async (req, res) => {
   const [rows, pending, wallet, lastRequest] = await Promise.all([
     all(
-      `SELECT id, amount, status, account_provider, account_name, account_number, created_at FROM withdrawal_requests WHERE user_id = ?
+      `SELECT id, amount, fee, payout_amount, status, account_provider, account_name, account_number, created_at FROM withdrawal_requests WHERE user_id = ?
        UNION ALL
-       SELECT id, amount, status, NULL AS account_provider, NULL AS account_name, NULL AS account_number, created_at FROM transactions WHERE user_id = ? AND type = 'withdrawal'
+       SELECT id, amount, 0 AS fee, amount AS payout_amount, status, NULL AS account_provider, NULL AS account_name, NULL AS account_number, created_at FROM transactions WHERE user_id = ? AND type = 'withdrawal'
        ORDER BY created_at DESC LIMIT 20`,
       [req.user.id, req.user.id]
     ),
@@ -1311,7 +1339,7 @@ app.delete('/api/admin/users/:id', adminMiddleware, async (req, res) => {
 
 app.get('/api/admin/withdrawals', adminMiddleware, async (req, res) => {
   const rows = await all(
-    `SELECT r.id, r.user_id, r.amount, r.status, r.account_provider, r.account_name, r.account_number, r.created_at,
+    `SELECT r.id, r.user_id, r.amount, r.fee, r.payout_amount, r.status, r.account_provider, r.account_name, r.account_number, r.created_at,
             u.username
      FROM withdrawal_requests r JOIN users u ON u.id = r.user_id
      ORDER BY r.status = 'pending' DESC, r.id DESC LIMIT 100`
@@ -1326,7 +1354,7 @@ app.get('/api/admin/withdrawals', adminMiddleware, async (req, res) => {
 const settleWithdrawalById = async (id, nextStatus) => {
   return await db.transaction(async () => {
     const withdrawal = await get(
-      'SELECT id, user_id, amount, status, account_provider, account_number FROM withdrawal_requests WHERE id = ?',
+      'SELECT id, user_id, amount, fee, payout_amount, status, account_provider, account_number FROM withdrawal_requests WHERE id = ?',
       [id]
     );
     if (!withdrawal) return { error: 404, message: 'Withdrawal request not found.' };
@@ -1342,6 +1370,11 @@ const settleWithdrawalById = async (id, nextStatus) => {
         'INSERT INTO transactions (user_id, type, amount, status) VALUES (?, ?, ?, ?)',
         [withdrawal.user_id, 'withdrawal', withdrawal.amount, 'completed']
       );
+      await run(
+        `INSERT INTO admin_fee_ledger (withdrawal_id, amount, destination)
+         VALUES (?, ?, ?)`,
+        [withdrawal.id, withdrawal.fee || Math.ceil(withdrawal.amount * WITHDRAWAL_FEE_RATE), ADMIN_FEE_ACCOUNT]
+      );
     }
 
     await run('UPDATE withdrawal_requests SET status = ? WHERE id = ?', [nextStatus, id]);
@@ -1356,7 +1389,7 @@ app.post('/api/admin/withdrawals/:id/approve', adminMiddleware, async (req, res)
   }
   return res.json({
     success: true,
-    message: `Withdrawal #${result.withdrawal.id} paid out. UGX ${Number(result.withdrawal.amount).toLocaleString()} sent to ${result.withdrawal.account_provider} ${result.withdrawal.account_number}.`,
+    message: `Withdrawal #${result.withdrawal.id} paid out. UGX ${Number(result.withdrawal.payout_amount || (result.withdrawal.amount - result.withdrawal.fee)).toLocaleString()} sent to ${result.withdrawal.account_provider} ${result.withdrawal.account_number}. The 10% fee was recorded for admin account ${ADMIN_FEE_ACCOUNT}.`,
     withdrawal: { ...result.withdrawal, status: 'paid' }
   });
 });

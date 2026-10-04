@@ -60,7 +60,7 @@
               <input id="withdrawAccountNumber" name="accountNumber" type="tel" inputmode="numeric" pattern="0[0-9]{9}" minlength="10" maxlength="12" placeholder="e.g. 0770123456" autocomplete="off" required />
 
               <label for="withdrawAmount">Withdrawal amount</label>
-              <input id="withdrawAmount" name="amount" type="number" min="500" step="500" inputmode="numeric" placeholder="Enter amount" required />
+              <input id="withdrawAmount" name="amount" type="number" min="5000" step="500" inputmode="numeric" placeholder="Minimum UGX 5,000" required />
 
               <label for="withdrawPin">PIN</label>
               <div class="withdraw-pin-row">
@@ -69,6 +69,7 @@
               </div>
 
               <p id="withdrawMessage" class="form-message" aria-live="polite"></p>
+              <small>Withdrawals have a 10% service fee. The fee is recorded for the admin mobile-money account.</small>
             </form>
           </section>
 

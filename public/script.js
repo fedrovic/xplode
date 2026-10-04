@@ -1116,11 +1116,13 @@ document.addEventListener('DOMContentLoaded', () => {
           const createdAt = new Date(`${String(withdrawal.created_at).replace(' ', 'T')}Z`);
           icon.className = 'history-icon outgoing';
           icon.textContent = '↘';
-          heading.textContent = currency(withdrawal.amount);
+          heading.textContent = currency(withdrawal.payout_amount || withdrawal.amount);
           const destination = withdrawal.account_number
             ? `${withdrawal.account_provider} · ${withdrawal.account_number} · `
             : '';
-          subtext.textContent = `${destination}${withdrawal.status} · ${Number.isNaN(createdAt.getTime()) ? '' : createdAt.toLocaleDateString()}`;
+          const fee = Number(withdrawal.fee || 0);
+          const feeText = fee ? ` · fee ${currency(fee)}` : '';
+          subtext.textContent = `${destination}${withdrawal.status}${feeText} · ${Number.isNaN(createdAt.getTime()) ? '' : createdAt.toLocaleDateString()}`;
           status.textContent = withdrawal.status;
           details.append(heading, subtext);
           item.append(icon, details, status);
@@ -1159,8 +1161,8 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      if (!Number.isSafeInteger(amount) || amount < 500) {
-        setPageMessage('Minimum withdrawal is UGX 500.', 'error');
+      if (!Number.isSafeInteger(amount) || amount < 5000) {
+        setPageMessage('Minimum withdrawal is UGX 5,000.', 'error');
         return;
       }
 

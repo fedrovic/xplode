@@ -197,11 +197,12 @@
     const subtext = document.createElement('small');
     const actions = document.createElement('div');
 
-    heading.textContent = `#${withdrawal.id} · ${money(withdrawal.amount)} · @${withdrawal.username}`;
+    heading.textContent = `#${withdrawal.id} · send ${money(withdrawal.payout_amount || withdrawal.amount)} · @${withdrawal.username}`;
     subtext.textContent = [
       withdrawal.account_provider,
       withdrawal.account_name,
       withdrawal.account_number,
+      withdrawal.fee ? `fee ${money(withdrawal.fee)}` : null,
       withdrawal.status,
       withdrawal.created_at
     ].filter(Boolean).join(' · ');

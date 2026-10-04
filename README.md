@@ -105,8 +105,9 @@ All `/api` routes are rate-limited (300 requests per 15 min per IP).
 
 - Deposits: Airtel Money and MTN Mobile Money, minimum UGX 10,000, unique transaction
   IDs, manual verification (balance updates after operator confirmation).
-- Withdrawals: minimum UGX 500, MTN/Airtel mobile money destination with
-  account name + number, PIN check, and **one request per 24 hours**
+- Withdrawals: minimum UGX 5,000, MTN/Airtel mobile money destination with
+  account name + number, PIN check, a 10% service fee recorded for the admin
+  account (0704141950), and **one request per 24 hours**
   (`nextWithdrawalAt` is returned so the UI can show the cooldown).
 - Referrals: every new account gets a unique 6-digit invite code; registering
   with someone's code links `referred_by` for team counting.

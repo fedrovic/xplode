@@ -292,26 +292,28 @@ test('application API workflows validate auth, money operations, rewards, plans,
   const invalidPinResponse = await fetch(`${baseUrl}/api/wallet/withdraw`, {
     method: 'POST',
     headers: { ...authHeaders, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ amount: 500, pin: '00000', accountProvider: 'Airtel Money', accountName: 'Test User One', accountNumber: '0770000000' })
+    body: JSON.stringify({ amount: 5000, pin: '00000', accountProvider: 'Airtel Money', accountName: 'Test User One', accountNumber: '0770000000' })
   });
   assert.equal(invalidPinResponse.status, 400);
 
   const missingAccountResponse = await fetch(`${baseUrl}/api/wallet/withdraw`, {
     method: 'POST',
     headers: { ...authHeaders, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ amount: 500, pin: '54321' })
+    body: JSON.stringify({ amount: 5000, pin: '54321' })
   });
   assert.equal(missingAccountResponse.status, 400);
 
   const withdrawalResponse = await fetch(`${baseUrl}/api/wallet/withdraw`, {
     method: 'POST',
     headers: { ...authHeaders, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ amount: 500, pin: '54321', accountProvider: 'Airtel Money', accountName: 'Test User One', accountNumber: '0770000000' })
+    body: JSON.stringify({ amount: 5000, pin: '54321', accountProvider: 'Airtel Money', accountName: 'Test User One', accountNumber: '0770000000' })
   });
   assert.equal(withdrawalResponse.status, 201);
   const submittedWithdrawal = await withdrawalResponse.json();
   assert.equal(submittedWithdrawal.withdrawal.status, 'pending');
   assert.equal(submittedWithdrawal.withdrawal.account_number, '0770000000');
+  assert.equal(submittedWithdrawal.withdrawal.fee, 500);
+  assert.equal(submittedWithdrawal.withdrawal.payout_amount, 4500);
 
   const excessiveWithdrawalResponse = await fetch(`${baseUrl}/api/wallet/withdraw`, {
     method: 'POST',
@@ -322,7 +324,7 @@ test('application API workflows validate auth, money operations, rewards, plans,
 
   const withdrawalsResponse = await fetch(`${baseUrl}/api/withdrawals`, { headers: authHeaders });
   const withdrawals = await withdrawalsResponse.json();
-  assert.equal(withdrawals.available, 24500);
+  assert.equal(withdrawals.available, 20000);
 
   // Admin payout flow: stats + users + mark-paid debits the wallet; reject refunds.
   const adminStatsResponse = await fetch(`${baseUrl}/api/admin/stats`, { headers: { 'X-Admin-Key': adminKey } });
@@ -354,8 +356,8 @@ test('application API workflows validate auth, money operations, rewards, plans,
 
   const walletAfterPayoutResponse = await fetch(`${baseUrl}/api/wallet`, { headers: authHeaders });
   const walletAfterPayout = (await walletAfterPayoutResponse.json()).wallet;
-  assert.equal(Number(walletAfterPayout.withdrawable), Number(walletBeforePayout.withdrawable) - 500);
-  assert.equal(Number(walletAfterPayout.total), Number(walletBeforePayout.total) - 500);
+  assert.equal(Number(walletAfterPayout.withdrawable), Number(walletBeforePayout.withdrawable) - 5000);
+  assert.equal(Number(walletAfterPayout.total), Number(walletBeforePayout.total) - 5000);
 
   const rePayoutResponse = await fetch(`${baseUrl}/api/admin/withdrawals/${pendingPayout.id}/approve`, {
     method: 'POST',
@@ -535,8 +537,8 @@ test('application API workflows validate auth, money operations, rewards, plans,
 
   const walletResponse = await fetch(`${baseUrl}/api/wallet`, { headers: authHeaders });
   const { wallet } = await walletResponse.json();
-  assert.equal(wallet.withdrawable, 26100);
-  assert.equal(wallet.total, 26100);
+  assert.equal(wallet.withdrawable, 21600);
+  assert.equal(wallet.total, 21600);
 
   const transactionsResponse = await fetch(`${baseUrl}/api/transactions`, { headers: authHeaders });
   const transactions = await transactionsResponse.json();
@@ -550,7 +552,7 @@ test('application API workflows validate auth, money operations, rewards, plans,
   const toonSubscribe = await toonSubscribeResponse.json();
   assert.equal(toonSubscribe.status, 'active', 'matching admin-approved deposit activates VIP 1');
   const walletAfterSubscription = await (await fetch(`${baseUrl}/api/wallet`, { headers: authHeaders })).json();
-  assert.equal(walletAfterSubscription.wallet.withdrawable, 16100, 'VIP 1 principal is reserved and is not withdrawable');
+  assert.equal(walletAfterSubscription.wallet.withdrawable, 11600, 'VIP 1 principal is reserved and is not withdrawable');
 
   const toonStatusResponse = await fetch(`${baseUrl}/api/toonhub/status`, { headers: authHeaders });
   const toonStatus = await toonStatusResponse.json();
