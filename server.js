@@ -62,16 +62,15 @@ app.disable('x-powered-by');
 app.set('trust proxy', 1);
 app.use(cors());
 // CSP: pages load no inline scripts, so external script execution is blocked.
-// Allowed externals: Google Fonts, remote kid-cartoon videos (explode.live),
-// YouTube-nocookie embeds on the cartoons page.
+// Allowed externals: remote kid-cartoon videos and YouTube embeds on the cartoons page.
 app.use(helmet({
   contentSecurityPolicy: {
     useDefaults: true,
     directives: {
       'default-src': ["'self'"],
       'script-src': ["'self'"],
-      'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
-      'font-src': ['https://fonts.gstatic.com'],
+      'style-src': ["'self'", "'unsafe-inline'"],
+      'font-src': ["'self'"],
       'img-src': ["'self'", 'data:', 'https:'],
       'media-src': ["'self'", 'https:'],
       'frame-src': ['https://www.youtube-nocookie.com', 'https://www.youtube.com'],
@@ -339,6 +338,15 @@ const createTables = async () => {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  await run('CREATE INDEX IF NOT EXISTS idx_transactions_user_id_id ON transactions(user_id, id DESC)');
+  await run('CREATE INDEX IF NOT EXISTS idx_deposit_requests_user_id_id ON deposit_requests(user_id, id DESC)');
+  await run('CREATE INDEX IF NOT EXISTS idx_deposit_requests_status_id ON deposit_requests(status, id ASC)');
+  await run('CREATE INDEX IF NOT EXISTS idx_withdrawal_requests_user_id_id ON withdrawal_requests(user_id, id DESC)');
+  await run('CREATE INDEX IF NOT EXISTS idx_withdrawal_requests_status_id ON withdrawal_requests(status, id ASC)');
+  await run('CREATE INDEX IF NOT EXISTS idx_users_referred_by ON users(referred_by)');
+  await run('CREATE INDEX IF NOT EXISTS idx_fortune_redemptions_user_id_date ON fortune_redemptions(user_id, redeemed_at DESC)');
+  await run('CREATE INDEX IF NOT EXISTS idx_sms_log_created_at ON sms_log(created_at DESC)');
 
   try {
     await run('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_invite_code ON users(invite_code)');
@@ -811,17 +819,16 @@ app.get('/api/withdrawals', authMiddleware, async (req, res) => {
 });
 
 app.get('/api/team', authMiddleware, async (req, res) => {
-  const [directResult, level2Result] = await Promise.all([
-    get('SELECT COUNT(*) AS count FROM users WHERE referred_by = ?', [req.user.id]),
-    get(
-      `SELECT COUNT(*) AS count FROM users AS l2
-       JOIN users AS l1 ON l1.id = l2.referred_by
-       WHERE l1.referred_by = ?`,
-      [req.user.id]
-    )
-  ]);
-  const direct = Number(directResult.count);
-  const level2 = Number(level2Result.count);
+  const team = await get(
+    `SELECT
+       (SELECT COUNT(*) FROM users WHERE referred_by = ?) AS direct,
+       (SELECT COUNT(*) FROM users AS l2
+        JOIN users AS l1 ON l1.id = l2.referred_by
+        WHERE l1.referred_by = ?) AS level2`,
+    [req.user.id, req.user.id]
+  );
+  const direct = Number(team.direct);
+  const level2 = Number(team.level2);
 
   return res.json({
     success: true,
@@ -856,18 +863,24 @@ app.post('/api/rewards/claim', authMiddleware, (req, res) => {
 
 app.get('/api/toonhub/status', authMiddleware, async (req, res) => {
   const today = getKampalaDate();
-  const [activeRows, pendingRows, claimedRows, watchedRows, startedRows] = await Promise.all([
-    all("SELECT level FROM toon_subscriptions WHERE user_id = ? AND status = 'active'", [req.user.id]),
-    all("SELECT level FROM toon_subscriptions WHERE user_id = ? AND status = 'payment_required'", [req.user.id]),
-    all('SELECT level FROM toon_reward_claims WHERE user_id = ? AND claim_date = ?', [req.user.id, today]),
-    all('SELECT level FROM toon_watch_sessions WHERE user_id = ? AND watch_date = ? AND completed_at IS NOT NULL', [req.user.id, today]),
-    all('SELECT level FROM toon_watch_sessions WHERE user_id = ? AND watch_date = ?', [req.user.id, today])
-  ]);
-  const activeLevels = new Set(activeRows.map((row) => Number(row.level)));
-  const pendingLevels = new Set(pendingRows.map((row) => Number(row.level)));
-  const claimedLevels = new Set(claimedRows.map((row) => Number(row.level)));
-  const watchedLevels = new Set(watchedRows.map((row) => Number(row.level)));
-  const startedLevels = new Set(startedRows.map((row) => Number(row.level)));
+  const statusRows = await all(
+    `SELECT 'active' AS kind, level FROM toon_subscriptions WHERE user_id = ? AND status = 'active'
+     UNION ALL
+     SELECT 'pending', level FROM toon_subscriptions WHERE user_id = ? AND status = 'payment_required'
+     UNION ALL
+     SELECT 'claimed', level FROM toon_reward_claims WHERE user_id = ? AND claim_date = ?
+     UNION ALL
+     SELECT 'watched', level FROM toon_watch_sessions WHERE user_id = ? AND watch_date = ? AND completed_at IS NOT NULL
+     UNION ALL
+     SELECT 'started', level FROM toon_watch_sessions WHERE user_id = ? AND watch_date = ?`,
+    [req.user.id, req.user.id, req.user.id, today, req.user.id, today, req.user.id, today]
+  );
+  const levelsOf = (kind) => new Set(statusRows.filter((row) => row.kind === kind).map((row) => Number(row.level)));
+  const activeLevels = levelsOf('active');
+  const pendingLevels = levelsOf('pending');
+  const claimedLevels = levelsOf('claimed');
+  const watchedLevels = levelsOf('watched');
+  const startedLevels = levelsOf('started');
   const levels = Object.entries(TOON_LEVELS).map(([level, details]) => ({
     level: Number(level),
     amount: details.amount,
@@ -1669,11 +1682,17 @@ app.use((req, res, next) => {
 app.use(express.static(PUBLIC_DIR, {
   index: false,
   dotfiles: 'ignore',
+  etag: true,
+  lastModified: false,
+  maxAge: '1h',
+  immutable: true,
   setHeaders: (res, filePath) => {
     if (filePath.endsWith('.html')) {
       res.setHeader('Cache-Control', 'no-cache');
     } else if (filePath.endsWith('.png') || filePath.endsWith('.jpg') || filePath.endsWith('.svg') || filePath.endsWith('.webp')) {
-      res.setHeader('Cache-Control', 'public, max-age=604800');
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    } else if (filePath.endsWith('.css') || filePath.endsWith('.js')) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     } else {
       res.setHeader('Cache-Control', 'public, max-age=86400');
     }

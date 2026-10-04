@@ -1,4 +1,4 @@
-/* Fonts are preconnected and loaded via <link> in each page (Nunito) — no blocking @import here. */
+/* Performance-first system font stack keeps pages fast without remote font requests. */
 
 :root {
   --bg: #f2f1f3;
@@ -28,7 +28,7 @@
 html, body {
   margin: 0;
   min-height: 100%;
-  font-family: "Nunito", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background: #f4f3f2;
   color: var(--text);
   overflow-x: hidden;
@@ -551,7 +551,7 @@ svg {
 .intro h2 {
   margin: 0;
   font-size: clamp(1.9rem, 2vw, 2.35rem);
-  font-family: "Nunito", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   letter-spacing: -0.06em;
   line-height: 1.12;
 }
@@ -2672,7 +2672,7 @@ svg {
 h1,
 h2,
 h3 {
-  font-family: "Nunito", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 button:not(.submit-btn):not(.toggle-password):not(.reward-close):not(.history-retry):not(.admin-tab):not(:disabled) {
@@ -7404,7 +7404,7 @@ button:not(.submit-btn):not(.toggle-password):not(.reward-close):not(.history-re
 .rewards-page .rewards-heading-copy h1 {
   margin: 0;
   color: #322d34;
-  font-family: "Nunito", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 1.32rem;
   font-weight: 700;
   line-height: 1.2;
@@ -7673,7 +7673,7 @@ button:not(.submit-btn):not(.toggle-password):not(.reward-close):not(.history-re
 .plans-page {
   background: linear-gradient(180deg, #bceefa 0%, #dcf7fb 58%, #eff7ed 100%);
   color: #30241d;
-  font-family: "Nunito", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .plans-page .plans-shell {
@@ -7747,7 +7747,7 @@ button:not(.submit-btn):not(.toggle-password):not(.reward-close):not(.history-re
   background: #e31a1a;
   box-shadow: 0 3px 0 #c11313;
   color: #fff;
-  font-family: "Nunito", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 0.82rem;
   font-weight: 700;
   line-height: 1.2;
@@ -7945,7 +7945,7 @@ button:not(.submit-btn):not(.toggle-password):not(.reward-close):not(.history-re
     radial-gradient(circle at 90% 58%, rgba(255,255,255,0.88) 0 3px, transparent 4px),
     linear-gradient(180deg, #bdeeff 0%, #e8f9ff 28%, #fff4d8 100%);
   color: #30241d;
-  font-family: "Nunito", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .salary-page .salary-shell {
@@ -8004,7 +8004,7 @@ button:not(.submit-btn):not(.toggle-password):not(.reward-close):not(.history-re
   flex-direction: column;
   gap: 3px;
   min-width: 0;
-  font-family: "Nunito", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .salary-page .salary-qualify-copy strong {
@@ -8031,7 +8031,7 @@ button:not(.submit-btn):not(.toggle-password):not(.reward-close):not(.history-re
 .salary-page .salary-rules-card h1 {
   margin: 0 0 10px;
   color: #2c5e5e;
-  font-family: "Nunito", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 0.88rem;
   font-weight: 700;
   line-height: 1.35;
@@ -8077,7 +8077,7 @@ button:not(.submit-btn):not(.toggle-password):not(.reward-close):not(.history-re
   gap: 9px;
   margin: 22px 4px 12px;
   color: #3d282b;
-  font-family: "Nunito", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 1.06rem;
   font-weight: 700;
 }
@@ -8155,7 +8155,7 @@ button:not(.submit-btn):not(.toggle-password):not(.reward-close):not(.history-re
 .salary-page .salary-position-name-wrap h2 {
   margin: 0;
   color: #3d282b;
-  font-family: "Nunito", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 1.06rem;
   font-weight: 700;
   line-height: 1.1;
@@ -8278,7 +8278,7 @@ button:not(.submit-btn):not(.toggle-password):not(.reward-close):not(.history-re
 }
 
 .salary-page .salary-payment-row > strong {
-  font-family: "Nunito", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 1.06rem;
   font-weight: 700;
   white-space: nowrap;
@@ -8297,7 +8297,7 @@ button:not(.submit-btn):not(.toggle-password):not(.reward-close):not(.history-re
 }
 
 .salary-page .salary-climb-callout strong {
-  font-family: "Nunito", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 1.02rem;
 }
 
@@ -8393,7 +8393,7 @@ button:not(.submit-btn):not(.toggle-password):not(.reward-close):not(.history-re
     radial-gradient(circle at 90% 25%, rgba(255,255,255,0.9) 0 3px, transparent 4px),
     linear-gradient(180deg, #bdeeff 0%, #e8f9ff 28%, #fff4d8 100%);
   color: #30241d;
-  font-family: "Nunito", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .fortune-page .fortune-shell {
@@ -8443,7 +8443,7 @@ button:not(.submit-btn):not(.toggle-password):not(.reward-close):not(.history-re
 }
 
 .fortune-page .fortune-total > strong {
-  font-family: "Nunito", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 1.45rem;
   font-weight: 700;
   white-space: nowrap;
@@ -8460,7 +8460,7 @@ button:not(.submit-btn):not(.toggle-password):not(.reward-close):not(.history-re
   background: linear-gradient(145deg, #e31a1a, #c11313);
   box-shadow: 0 7px 0 #8b0000, 0 12px 20px rgba(193, 19, 19, 0.25);
   color: #fff;
-  font-family: "Nunito", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 1.06rem;
   font-weight: 700;
   transition: transform 0.18s ease, filter 0.18s ease;
@@ -8479,7 +8479,7 @@ button:not(.submit-btn):not(.toggle-password):not(.reward-close):not(.history-re
 .fortune-page .fortune-wins-section h1 {
   margin: 0 4px 10px;
   color: #3d282b;
-  font-family: "Nunito", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 0.95rem;
   font-weight: 700;
 }
@@ -8543,7 +8543,7 @@ button:not(.submit-btn):not(.toggle-password):not(.reward-close):not(.history-re
 .fortune-page .fortune-win-details strong {
   overflow: hidden;
   color: #30241d;
-  font-family: "Nunito", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 0.78rem;
   font-weight: 700;
   text-overflow: ellipsis;
@@ -8560,7 +8560,7 @@ button:not(.submit-btn):not(.toggle-password):not(.reward-close):not(.history-re
 .fortune-page .fortune-win-amount {
   flex: 0 0 auto;
   color: #3d7a2a;
-  font-family: "Nunito", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 0.94rem;
   font-weight: 800;
 }
@@ -8642,7 +8642,7 @@ button:not(.submit-btn):not(.toggle-password):not(.reward-close):not(.history-re
 .fortune-page .fortune-modal h2 {
   margin: 0;
   color: #3d282b;
-  font-family: "Nunito", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 1.35rem;
   font-weight: 700;
 }
@@ -8669,7 +8669,7 @@ button:not(.submit-btn):not(.toggle-password):not(.reward-close):not(.history-re
   background: #fffdf7;
   box-shadow: inset 0 2px 4px rgba(100, 70, 20, 0.06);
   color: #30241d;
-  font-family: "Nunito", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 1rem;
   font-weight: 700;
   text-align: center;
@@ -8690,7 +8690,7 @@ button:not(.submit-btn):not(.toggle-password):not(.reward-close):not(.history-re
   background: linear-gradient(145deg, #a8df7e, #65ae40);
   box-shadow: 0 5px 0 #4e8a2f;
   color: #fff;
-  font-family: "Nunito", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 1rem;
   font-weight: 700;
 }
@@ -8728,7 +8728,7 @@ button:not(.submit-btn):not(.toggle-password):not(.reward-close):not(.history-re
   padding: 10px 12px;
   border: 2px solid transparent;
   border-radius: 12px;
-  font-family: "Nunito", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 0.82rem;
   font-weight: 700;
   line-height: 1.35;
@@ -8845,7 +8845,7 @@ button:not(.submit-btn):not(.toggle-password):not(.reward-close):not(.history-re
 .reward-modal h2 {
   margin: 0;
   color: #3d282b;
-  font-family: "Nunito", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 1.35rem;
   font-weight: 800;
 }
@@ -8884,7 +8884,7 @@ button:not(.submit-btn):not(.toggle-password):not(.reward-close):not(.history-re
   background: linear-gradient(145deg, #a8df7e, #65ae40);
   box-shadow: 0 5px 0 #4e8a2f;
   color: #fff;
-  font-family: "Nunito", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 1rem;
   font-weight: 900;
   text-shadow: 0 2px 4px rgba(60, 110, 40, 0.35);

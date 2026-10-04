@@ -103,7 +103,7 @@ All `/api` routes are rate-limited (300 requests per 15 min per IP).
 
 ## Business rules encoded in the backend
 
-- Deposits: Airtel Money only right now, minimum UGX 10,000, unique transaction
+- Deposits: Airtel Money and MTN Mobile Money, minimum UGX 10,000, unique transaction
   IDs, manual verification (balance updates after operator confirmation).
 - Withdrawals: minimum UGX 500, MTN/Airtel mobile money destination with
   account name + number, PIN check, and **one request per 24 hours**

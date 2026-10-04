@@ -102,6 +102,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function clearSession() {
     localStorage.removeItem('xpLogin');
     localStorage.removeItem('xpToken');
+    localStorage.removeItem('xpRole');
     localStorage.removeItem('xpAppState');
   }
 
@@ -123,7 +124,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if (currentPage === 'index.html' && localStorage.getItem('xpToken')) {
-    window.location.replace('dashboard.html');
+    window.location.replace(localStorage.getItem('xpRole') === 'admin' ? 'admin.html' : 'dashboard.html');
     return;
   }
 
@@ -328,6 +329,7 @@ document.addEventListener('DOMContentLoaded', () => {
           writeState(nextState);
           localStorage.setItem('xpToken', result.token);
           localStorage.setItem('xpLogin', result.user.username);
+          localStorage.setItem('xpRole', result.role === 'admin' ? 'admin' : 'client');
           if (result.role === 'admin') {
             // Hand the admin token to the dashboard page so it opens straight away.
             sessionStorage.setItem('xpAdminToken', result.token);
@@ -426,6 +428,7 @@ document.addEventListener('DOMContentLoaded', () => {
           writeState(nextState);
           localStorage.setItem('xpToken', result.token);
           localStorage.setItem('xpLogin', username);
+          localStorage.setItem('xpRole', 'client');
           message.textContent = result.message || 'Account created successfully. Welcome to XPLODE!';
           message.classList.add('success');
           setTimeout(() => {

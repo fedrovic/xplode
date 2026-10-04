@@ -496,6 +496,10 @@
 
   signOutButton?.addEventListener('click', () => {
     sessionStorage.removeItem(adminTokenStorage);
+    localStorage.removeItem('xpToken');
+    localStorage.removeItem('xpLogin');
+    localStorage.removeItem('xpRole');
+    localStorage.removeItem('xpAppState');
     window.location.replace('index.html');
   });
 
